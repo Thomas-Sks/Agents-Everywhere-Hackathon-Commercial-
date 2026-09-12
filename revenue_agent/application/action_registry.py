@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from datetime import UTC, datetime
 
 from revenue_agent.config import PolicySettings
@@ -144,6 +145,7 @@ class ActionRegistry:
             probability=probability if probability >= 0 else None,
             objection=(
                 Objection(
+                    id=uuid.uuid4().hex[:6],
                     text=objection,
                     root_cause=objection_root_cause or "inconnue",
                     raised_at=_now(),
@@ -154,6 +156,24 @@ class ActionRegistry:
             next_steps=next_steps or None,
         )
         return "Opportunité mise à jour dans le CRM."
+
+    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> str:
+        """Clôt une objection traitée.
+
+        Sans cette action, une objection restait ouverte à vie : le contexte se polluait à
+        chaque cycle et le routage par enjeu restait épinglé sur le modèle le plus cher.
+        """
+        if not self._crm.resolve_objection(opportunity_id, objection_id, resolution):
+            return (
+                f"Objection '{objection_id}' introuvable sur cette opportunité. "
+                "Relis le contexte pour récupérer l'identifiant exact."
+            )
+        self._trace(
+            opportunity_id,
+            Channel.DECISION,
+            f"Objection {objection_id} résolue — {resolution}",
+        )
+        return f"Objection {objection_id} marquée comme résolue."
 
     # -- Communication ------------------------------------------------------------
 
@@ -435,7 +455,13 @@ def serialise_opportunity(opportunity: Opportunity) -> dict:
             for stakeholder in opportunity.stakeholders
         ],
         "objections_ouvertes": [
-            {"texte": objection.text, "cause_probable": objection.root_cause}
+            {
+                # L'identifiant est exposé pour que l'agent puisse clore l'objection
+                # précisément, sans se fier à une correspondance de texte.
+                "id": objection.id,
+                "texte": objection.text,
+                "cause_probable": objection.root_cause,
+            }
             for objection in opportunity.unresolved_objections()
         ],
         "historique": [

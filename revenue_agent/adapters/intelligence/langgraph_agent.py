@@ -191,6 +191,23 @@ class LangGraphDecisionAgent:
 
         @tool
         @_guard
+        def resolve_objection(opportunity_id: str, objection_id: str, resolution: str) -> str:
+            """Clôturer une objection que tu as traitée. À faire dès qu'une objection n'est
+            plus d'actualité — le prospect a obtenu sa réponse, la contrainte a disparu, ou
+            elle s'est révélée infondée.
+
+            Une objection laissée ouverte alors qu'elle est réglée pollue durablement
+            l'analyse de l'opportunité.
+
+            Args:
+                opportunity_id: Identifiant de l'opportunité.
+                objection_id: Identifiant de l'objection, tel qu'il figure dans le contexte.
+                resolution: Comment elle a été levée, en une phrase.
+            """
+            return actions.resolve_objection(opportunity_id, objection_id, resolution)
+
+        @tool
+        @_guard
         def send_email(opportunity_id: str, subject: str, body: str) -> str:
             """Envoyer un email au prospect. L'adresse est résolue depuis le CRM : ne la
             devine jamais.
@@ -264,6 +281,7 @@ class LangGraphDecisionAgent:
             research_prospect,
             record_interaction,
             update_opportunity,
+            resolve_objection,
             send_email,
             send_whatsapp_message,
             place_phone_call,

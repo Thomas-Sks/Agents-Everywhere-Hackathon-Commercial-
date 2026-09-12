@@ -16,6 +16,8 @@ v3/v4 utilisés ici restent supportés.
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from revenue_agent.adapters.http import HttpClient
@@ -50,6 +52,12 @@ COMPANY_PROPERTIES = ["name", "domain", "industry", "numberofemployees"]
 OBJECTION_PREFIX = "[OBJECTION]"
 INTERACTION_PREFIX = "[INTERACTION]"
 MAX_NOTES_READ = 20
+
+# Les notes HubSpot sont un journal : on n'édite pas une note passée, on en ajoute une qui
+# clôt la précédente. D'où un identifiant court porté par la note d'objection, et repris par
+# la note de résolution. Une correspondance par texte casserait à la moindre reformulation.
+_OBJECTION_RE = re.compile(r"^\[OBJECTION(?::([A-Za-z0-9]+))?\]\s*(.*)", re.DOTALL)
+_RESOLUTION_RE = re.compile(r"^\[OBJECTION-RESOLUE:([A-Za-z0-9]+)\]\s*(.*)", re.DOTALL)
 
 
 class HubSpotCrmAdapter:
@@ -174,9 +182,10 @@ class HubSpotCrmAdapter:
             )
 
         if objection is not None:
+            marker = f"[OBJECTION:{objection.id}]" if objection.id else OBJECTION_PREFIX
             self._create_note(
                 opportunity_id,
-                f"{OBJECTION_PREFIX} {objection.text} | cause probable : {objection.root_cause}",
+                f"{marker} {objection.text} | cause probable : {objection.root_cause}",
             )
         if next_steps:
             self._create_note(
@@ -187,6 +196,52 @@ class HubSpotCrmAdapter:
                 "Probabilité %s non poussée vers HubSpot (propriété calculée côté CRM)",
                 probability,
             )
+
+    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
+        if not objection_id:
+            return False
+        self._create_note(opportunity_id, f"[OBJECTION-RESOLUE:{objection_id}] {resolution}")
+        return True
+
+    def find_opportunity_by_phone(self, phone_number: str) -> str | None:
+        """Recherche indexée côté HubSpot, puis association contact → deal.
+
+        Deux à trois appels au total. L'alternative — parcourir le portefeuille et comparer
+        les numéros en local — coûterait des centaines d'appels par message entrant, contre un
+        quota de recherche plafonné à 4 requêtes/seconde.
+        """
+        variants = _phone_variants(phone_number)
+        if not variants:
+            return None
+
+        payload = self._http.request(
+            "POST",
+            "/crm/v3/objects/contacts/search",
+            json={
+                # Des groupes de filtres séparés s'interprètent comme un OU : on interroge
+                # les deux propriétés téléphoniques pour chaque écriture plausible du numéro.
+                "filterGroups": [
+                    {"filters": [{"propertyName": prop, "operator": "EQ", "value": variant}]}
+                    for variant in variants
+                    for prop in ("phone", "mobilephone")
+                ],
+                "properties": ["phone", "mobilephone"],
+                "limit": 5,
+            },
+        )
+
+        for contact in payload.get("results", []):
+            associations = self._http.request(
+                "GET",
+                f"/crm/v3/objects/contacts/{contact['id']}",
+                params={"associations": "deals"},
+            )
+            deal_ids = _association_ids(associations.get("associations", {}), "deals")
+            if deal_ids:
+                return deal_ids[0]
+
+        logger.info("Aucune opportunité associée au numéro %s", phone_number)
+        return None
 
     def log_call(self, opportunity_id: str, outcome: CallOutcome) -> None:
         payload = self._http.request(
@@ -255,8 +310,14 @@ def _to_stakeholder(properties: dict) -> Stakeholder:
 
 
 def _parse_notes(notes: dict) -> tuple[tuple[Objection, ...], tuple[Interaction, ...]]:
-    """Relit ce que l'agent a écrit lors des cycles précédents."""
-    objections: list[Objection] = []
+    """Relit ce que l'agent a écrit lors des cycles précédents.
+
+    Deux passes : on collecte d'abord les résolutions, puis on marque les objections
+    correspondantes. Sans cela, une objection notée avant sa résolution resterait ouverte —
+    et l'ordre des notes n'est pas garanti par l'API.
+    """
+    raw_objections: list[Objection] = []
+    resolutions: dict[str, str] = {}
     history: list[Interaction] = []
 
     for properties in notes.values():
@@ -265,25 +326,40 @@ def _parse_notes(notes: dict) -> tuple[tuple[Objection, ...], tuple[Interaction,
         if not body:
             continue
 
-        if body.startswith(OBJECTION_PREFIX):
-            text, _, cause = body[len(OBJECTION_PREFIX) :].partition("| cause probable :")
-            objections.append(
+        resolution = _RESOLUTION_RE.match(body)
+        if resolution:
+            resolutions[resolution.group(1)] = resolution.group(2).strip()
+            continue
+
+        objection = _OBJECTION_RE.match(body)
+        if objection:
+            text, _, cause = objection.group(2).partition("| cause probable :")
+            raw_objections.append(
                 Objection(
+                    id=objection.group(1) or "",
                     text=text.strip(),
                     root_cause=cause.strip() or "inconnue",
                     raised_at=occurred_at,
                 )
             )
-        else:
-            summary = body
-            if body.startswith(INTERACTION_PREFIX):
-                summary = body[len(INTERACTION_PREFIX) :].strip()
-            history.append(
-                Interaction(channel=Channel.SIGNAL, summary=summary, occurred_at=occurred_at)
-            )
+            continue
+
+        summary = body
+        if body.startswith(INTERACTION_PREFIX):
+            summary = body[len(INTERACTION_PREFIX) :].strip()
+        history.append(
+            Interaction(channel=Channel.SIGNAL, summary=summary, occurred_at=occurred_at)
+        )
+
+    objections = tuple(
+        replace(objection, resolved=True, resolution=resolutions[objection.id])
+        if objection.id and objection.id in resolutions
+        else objection
+        for objection in raw_objections
+    )
 
     history.sort(key=lambda item: item.occurred_at)
-    return tuple(objections), tuple(history)
+    return objections, tuple(history)
 
 
 def _call_body(outcome: CallOutcome) -> str:
@@ -295,6 +371,28 @@ def _call_body(outcome: CallOutcome) -> str:
     if outcome.transcript:
         sections.append(f"Transcript :\n{outcome.transcript}")
     return "\n\n".join(sections) or "Appel sans transcript."
+
+
+def _phone_variants(phone_number: str) -> list[str]:
+    """Écritures plausibles d'un même numéro, pour une recherche par égalité stricte.
+
+    HubSpot compare les propriétés téléphoniques telles qu'elles ont été saisies, et un CRM
+    contient « +33 6 00 00 00 01 » aussi bien que « 0600000001 ». On interroge donc plusieurs
+    formes plutôt que de comparer des suffixes de chiffres en local — un rapprochement sur les
+    derniers chiffres produirait des faux positifs entre prospects distincts.
+    """
+    digits = "".join(character for character in phone_number if character.isdigit())
+    if len(digits) < 8:
+        return []
+
+    variants = {digits, f"+{digits}"}
+    # Numéro national français reconstruit depuis l'international, et réciproquement.
+    if digits.startswith("33") and len(digits) == 11:
+        variants.add(f"0{digits[2:]}")
+    elif digits.startswith("0") and len(digits) == 10:
+        variants.add(f"+33{digits[1:]}")
+        variants.add(f"33{digits[1:]}")
+    return sorted(variants)
 
 
 def _association_ids(associations: dict, key: str) -> list[str]:

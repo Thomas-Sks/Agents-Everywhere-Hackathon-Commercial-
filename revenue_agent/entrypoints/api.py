@@ -17,7 +17,6 @@ from __future__ import annotations
 import hmac
 import logging
 from contextlib import asynccontextmanager
-from datetime import UTC
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request, Response
@@ -279,6 +278,9 @@ _RETELL_ACTIONS: dict[str, Any] = {
         objection_root_cause=a.get("objection_root_cause", ""),
         next_steps=a.get("next_steps", ""),
     ),
+    "resolve_objection": lambda c, a: c.actions.resolve_objection(
+        a["opportunity_id"], a["objection_id"], a.get("resolution", "")
+    ),
     "send_email": lambda c, a: c.actions.send_email(
         a["opportunity_id"], a["subject"], a["body"]
     ),
@@ -323,29 +325,14 @@ def _extract_whatsapp_message(payload: dict) -> tuple[str, str] | None:
 
 
 def _resolve_opportunity_by_phone(current: Container, phone: str) -> str | None:
-    """Retrouve l'opportunité à partir du numéro émetteur.
+    """Délègue la résolution au CRM, qui dispose d'un index sur les numéros.
 
-    Meta renvoie le numéro sans `+` ; la comparaison se fait donc sur les chiffres seuls.
+    La version précédente chargeait jusqu'à cent opportunités — une requête chacune — à chaque
+    message entrant, ne lisait que la première page, et rapprochait sur les neuf derniers
+    chiffres : lent, dévoreur de quota, et capable d'attribuer un message au mauvais prospect.
     """
-    digits = "".join(character for character in phone if character.isdigit())
-    from datetime import datetime, timedelta
-
-    since = datetime.now(UTC) - timedelta(days=365)
     try:
-        page = current.crm.find_modified_since(since, page_size=100)
+        return current.crm.find_opportunity_by_phone(phone)
     except RevenueAgentError:
-        logger.exception("Impossible d'interroger le CRM pour résoudre %s", phone)
+        logger.exception("Impossible de résoudre l'opportunité pour le numéro %s", phone)
         return None
-
-    for snapshot in page.items:
-        try:
-            opportunity = current.crm.load_opportunity(snapshot.id)
-        except RevenueAgentError:
-            continue
-        for stakeholder in opportunity.stakeholders:
-            if not stakeholder.phone:
-                continue
-            candidate = "".join(c for c in stakeholder.phone if c.isdigit())
-            if candidate and candidate.endswith(digits[-9:]):
-                return opportunity.id
-    return None

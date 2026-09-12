@@ -47,6 +47,23 @@ class CrmPort(Protocol):
         next_steps: str | None = None,
     ) -> None: ...
 
+    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
+        """Clôt une objection traitée. Retourne False si l'identifiant est inconnu.
+
+        Sans ce chemin d'écriture, les objections s'accumulent indéfiniment : le contexte se
+        pollue à chaque cycle et le routage par enjeu reste bloqué sur le modèle le plus cher,
+        puisqu'il s'appuie sur la présence d'objections ouvertes.
+        """
+        ...
+
+    def find_opportunity_by_phone(self, phone_number: str) -> str | None:
+        """Retrouve une opportunité à partir du numéro d'un interlocuteur.
+
+        Doit être résolu côté CRM (recherche indexée), jamais par balayage du portefeuille :
+        c'est appelé à chaque message entrant.
+        """
+        ...
+
     def log_call(self, opportunity_id: str, outcome: CallOutcome) -> None:
         """Enregistre un appel téléphonique réel (transcript, durée, issue)."""
         ...

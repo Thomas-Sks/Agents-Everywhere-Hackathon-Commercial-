@@ -72,6 +72,33 @@ class FakeCrm:
             }
         )
 
+    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
+        opportunity = self.opportunities.get(opportunity_id)
+        if opportunity is None:
+            return False
+        from dataclasses import replace as _replace
+
+        updated = tuple(
+            _replace(objection, resolved=True, resolution=resolution)
+            if objection.id == objection_id
+            else objection
+            for objection in opportunity.objections
+        )
+        if updated == opportunity.objections:
+            return False
+        self.opportunities[opportunity_id] = _replace(opportunity, objections=updated)
+        return True
+
+    def find_opportunity_by_phone(self, phone_number: str) -> str | None:
+        digits = "".join(c for c in phone_number if c.isdigit())
+        for opportunity_id, opportunity in self.opportunities.items():
+            for stakeholder in opportunity.stakeholders:
+                if not stakeholder.phone:
+                    continue
+                if "".join(c for c in stakeholder.phone if c.isdigit()) == digits:
+                    return opportunity_id
+        return None
+
     def log_call(self, opportunity_id: str, outcome: CallOutcome) -> None:
         self.logged_calls.append(outcome)
 

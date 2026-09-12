@@ -90,11 +90,37 @@ class JsonFileCrmAdapter:
                     {
                         "text": objection.text,
                         "root_cause": objection.root_cause,
+                        "id": objection.id,
                         "resolved": objection.resolved,
                         "raised_at": (objection.raised_at or datetime.now(UTC)).isoformat(),
                     }
                 )
             opportunity["last_activity_at"] = datetime.now(UTC).isoformat()
+
+    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
+        with self._document.update() as data:
+            opportunity = data.get(OPPORTUNITIES_KEY, {}).get(opportunity_id)
+            if opportunity is None:
+                return False
+            for item in opportunity.get("objections", []):
+                if item.get("id") == objection_id:
+                    item["resolved"] = True
+                    item["resolution"] = resolution
+                    return True
+        return False
+
+    def find_opportunity_by_phone(self, phone_number: str) -> str | None:
+        digits = _digits(phone_number)
+        if len(digits) < 8:
+            return None
+        for opportunity_id, raw in self._document.read().get(OPPORTUNITIES_KEY, {}).items():
+            for stakeholder in raw.get("stakeholders", []):
+                candidate = _digits(stakeholder.get("phone") or "")
+                # Comparaison sur le numéro national complet : deux prospects distincts
+                # peuvent partager un suffixe, jamais le numéro entier.
+                if candidate and _national(candidate) == _national(digits):
+                    return opportunity_id
+        return None
 
     def log_call(self, opportunity_id: str, outcome: CallOutcome) -> None:
         summary = outcome.summary or "Appel terminé"
@@ -150,6 +176,8 @@ def _deserialise(opportunity_id: str, raw: dict) -> Opportunity:
                 root_cause=item.get("root_cause", "inconnue"),
                 resolved=bool(item.get("resolved", False)),
                 raised_at=_parse_datetime(item.get("raised_at")),
+                id=item.get("id", ""),
+                resolution=item.get("resolution", ""),
             )
             for item in raw.get("objections", [])
         ),
@@ -166,6 +194,19 @@ def _deserialise(opportunity_id: str, raw: dict) -> Opportunity:
         last_activity_at=_parse_datetime(raw.get("last_activity_at")),
         source="local",
     )
+
+
+def _digits(value: str) -> str:
+    return "".join(character for character in value if character.isdigit())
+
+
+def _national(digits: str) -> str:
+    """Ramène un numéro à sa forme nationale pour pouvoir comparer deux écritures."""
+    if digits.startswith("33") and len(digits) == 11:
+        return digits[2:]
+    if digits.startswith("0") and len(digits) == 10:
+        return digits[1:]
+    return digits
 
 
 def _parse_datetime(raw: str | None) -> datetime | None:

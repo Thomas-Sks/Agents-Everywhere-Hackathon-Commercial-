@@ -42,10 +42,19 @@ class Stakeholder:
 
 @dataclass(frozen=True, slots=True)
 class Objection:
+    """Une objection exprimée par le prospect.
+
+    `id` est indispensable : une objection se lève au fil des échanges, et il faut pouvoir
+    désigner *laquelle* on clôt. Sans identifiant, la résolution ne peut s'appuyer que sur une
+    correspondance de texte, qui casse dès que la formulation varie.
+    """
+
     text: str
     root_cause: str = "inconnue"
     resolved: bool = False
     raised_at: datetime | None = None
+    id: str = ""
+    resolution: str = ""
 
 
 @dataclass(frozen=True, slots=True)
