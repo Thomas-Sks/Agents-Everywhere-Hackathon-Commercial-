@@ -1,14 +1,13 @@
-"""Limites d'autonomie — appliquées par le code, pas par le prompt.
+"""Autonomy limits — enforced by code, not by the prompt.
 
-Le prompt du moteur de décision décrit au modèle ce qu'il a le droit de faire. Cette politique
-l'impose. La distinction est fondamentale : un prompt est une consigne, un contrôle d'accès est
-une garantie. Rien ne doit dépendre de la bonne volonté du modèle pour empêcher un email de
-partir à un vrai prospect, et `escalate_to_human` ne peut pas être la seule protection puisque
-c'est une action que le modèle *choisit* d'appeler.
+The decision engine's prompt tells the model what it is allowed to do. This policy enforces it.
+The distinction is fundamental: a prompt is an instruction, an access control is a guarantee.
+Nothing should depend on the model's goodwill to stop an email from reaching a real prospect,
+and `escalate_to_human` cannot be the only protection since it is an action the model *chooses*
+to call.
 
-Toutes les règles sont des fonctions pures évaluées **avant** l'exécution d'une action
-sortante. Elles sont donc testables exhaustivement, et auditables : chaque refus nomme la règle
-qui l'a produit.
+Every rule is a pure function evaluated **before** an outbound action is executed. They are
+therefore exhaustively testable, and auditable: every refusal names the rule that produced it.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ class Verdict(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class OutboundAction:
-    """Une action sur le point de toucher un prospect réel."""
+    """An action about to reach a real prospect."""
 
     kind: ActionKind
     opportunity_id: str
@@ -59,9 +58,8 @@ class PolicyDecision:
         return self.verdict is Verdict.REQUIRE_APPROVAL
 
 
-# Un montant explicitement libellé en euros. Volontairement restrictif : on n'attrape que les
-# chiffres accolés à un marqueur monétaire, pour ne pas confondre « 10 utilisateurs » ou une
-# année avec un prix.
+# An amount explicitly denominated in euros. Deliberately restrictive: we only catch digits
+# adjacent to a currency marker, so as not to mistake "10 users" or a year for a price.
 _PRICE_PATTERN = re.compile(
     r"(\d[\d\s.,]*)\s*(?:€|eur\b|euros?\b)|(?:€|eur\b)\s*(\d[\d\s.,]*)", re.IGNORECASE
 )
@@ -78,18 +76,18 @@ def evaluate(
     review: ReviewFinding | None = None,
     human_approved: bool = False,
 ) -> PolicyDecision:
-    """Verdict sur une action sortante.
+    """Verdict on an outbound action.
 
-    Les règles sont ordonnées de la plus restrictive à la plus permissive : le premier refus
-    l'emporte, et un blocage prime toujours sur une demande de validation.
+    The rules are ordered from the most restrictive to the most permissive: the first refusal
+    wins, and a block always takes precedence over an approval request.
 
-    `review` est le verdict de la relecture du message (lexicale puis sémantique) : il est
-    calculé en dehors du domaine, qui reste ainsi une fonction pure sans appel réseau.
+    `review` is the verdict of the message review (lexical, then semantic): it is computed
+    outside the domain, which thus remains a pure function with no network call.
 
-    `human_approved` est le rejeu d'une action explicitement validée par un humain : les règles
-    de validation sont alors levées, mais **pas les blocages** — un opérateur qui approuve une
-    remise ne doit pas pouvoir contourner le mode simulation ni la liste de destinataires
-    autorisés, qui sont des garde-fous d'exploitation et non des arbitrages commerciaux.
+    `human_approved` is the replay of an action a human explicitly approved: the approval rules
+    are then lifted, but **not the blocks** — an operator who approves a discount must not be
+    able to bypass simulated mode or the allow-list of recipients, which are operational
+    guardrails rather than sales judgements.
     """
     if settings.mode is AgentMode.DRY_RUN:
         return PolicyDecision(
@@ -156,10 +154,10 @@ def evaluate(
 
 
 def needs_message_review(settings: PolicySettings) -> bool:
-    """La relecture ne sert qu'en mode autonome.
+    """Review is only useful in autonomous mode.
 
-    Dans les autres modes, le verdict est connu d'avance — tout est retenu ou tout est bloqué —
-    et payer un appel de modèle pour confirmer une décision déjà prise serait du gaspillage.
+    In the other modes the verdict is known in advance — everything is held or everything is
+    blocked — and paying for a model call to confirm a decision already made would be waste.
     """
     return settings.mode is AgentMode.AUTONOMOUS
 
@@ -170,10 +168,10 @@ def _is_allowed(recipient: str, settings: PolicySettings) -> bool:
 
 
 def _unknown_price_quoted(content: str, catalogue_prices: tuple[float, ...]) -> float | None:
-    """Premier prix cité qui ne correspond à aucun prix du catalogue.
+    """First quoted price that matches no price in the catalogue.
 
-    Empêche structurellement une hallucination tarifaire de partir chez un prospect — le
-    prompt demande déjà au modèle de vérifier, mais demander n'est pas garantir.
+    Structurally prevents a pricing hallucination from reaching a prospect — the prompt already
+    asks the model to check, but asking is not guaranteeing.
     """
     for quoted in _extract_prices(content):
         if not any(abs(quoted - known) <= _PRICE_TOLERANCE for known in catalogue_prices):
@@ -193,7 +191,7 @@ def _extract_prices(content: str) -> list[float]:
 
 def _to_float(raw: str) -> float | None:
     cleaned = raw.replace(" ", "").replace(" ", "").replace("\xa0", "")
-    # Format français : le point sépare les milliers, la virgule les décimales.
+    # French formatting: the dot separates thousands, the comma separates decimals.
     cleaned = cleaned.replace(".", "").replace(",", ".")
     try:
         return float(cleaned)

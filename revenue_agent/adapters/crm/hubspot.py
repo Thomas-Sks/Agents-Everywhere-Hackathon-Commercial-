@@ -1,23 +1,23 @@
-"""Adapter CRM HubSpot — implémente `CrmPort` sur l'API réelle.
+"""HubSpot CRM adapter — implements `CrmPort` against the real API.
 
-Choix de conception : **le CRM est la seule source de vérité**. Ce que l'agent apprend
-(objections, décisions, interactions) est écrit sous forme de notes préfixées, donc lisible
-par un humain dans HubSpot *et* re-parsable par l'agent au scan suivant. Pas de base cachée à
-côté du CRM que les commerciaux ne verraient jamais.
+Design choice: **the CRM is the single source of truth**. Everything the agent learns
+(objections, decisions, interactions) is written as prefixed notes, so it stays readable by a
+human inside HubSpot *and* re-parsable by the agent on the next scan. No hidden database
+sitting next to the CRM that sales reps would never see.
 
-Associations : on utilise l'endpoint v4 `associations/default/...` plutôt que des
-`associationTypeId` en dur (214 pour note→deal, etc.). HubSpot y applique le type par défaut
-lui-même — une constante numérique erronée produirait un 400 difficile à diagnostiquer.
+Associations: we use the v4 `associations/default/...` endpoint rather than hard-coded
+`associationTypeId` values (214 for note→deal, and so on). HubSpot applies the default type
+itself there — a wrong numeric constant would produce a 400 that is hard to diagnose.
 
-Note : HubSpot migre vers un versionnage par date (`/crm/objects/2026-09/`). Les chemins
-v3/v4 utilisés ici restent supportés.
+Note: HubSpot is migrating to date-based versioning (`/crm/objects/2026-09/`). The v3/v4
+paths used here remain supported.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from revenue_agent.adapters.http import HttpClient
@@ -54,10 +54,12 @@ OBJECTION_PREFIX = "[OBJECTION]"
 INTERACTION_PREFIX = "[INTERACTION]"
 MAX_NOTES_READ = 20
 
-# Les notes HubSpot sont un journal : on n'édite pas une note passée, on en ajoute une qui
-# clôt la précédente. D'où un identifiant court porté par la note d'objection, et repris par
-# la note de résolution. Une correspondance par texte casserait à la moindre reformulation.
+# HubSpot notes are a journal: you don't edit a past note, you add one that closes the
+# previous one. Hence a short identifier carried by the objection note and echoed by the
+# resolution note. Matching on text would break at the slightest rewording.
 _OBJECTION_RE = re.compile(r"^\[OBJECTION(?::([A-Za-z0-9]+))?\]\s*(.*)", re.DOTALL)
+# `[PARTIE-PRENANTE] Nom | posture : decideur | notes libres`
+_STAKEHOLDER_RE = re.compile(r"^\[PARTIE-PRENANTE\]\s*(.*)", re.DOTALL)
 _RESOLUTION_RE = re.compile(r"^\[OBJECTION-RESOLUE:([A-Za-z0-9]+)\]\s*(.*)", re.DOTALL)
 
 
@@ -69,7 +71,7 @@ class HubSpotCrmAdapter:
             error_factory=lambda message: CrmError("hubspot", message),
         )
 
-    # -- Lecture ------------------------------------------------------------------
+    # -- Reads --------------------------------------------------------------------
 
     def find_modified_since(
         self, since: datetime, cursor: str | None = None, page_size: int = 100
@@ -126,7 +128,7 @@ class HubSpotCrmAdapter:
 
         properties = deal.get("properties", {})
         company = next(iter(companies.values()), {})
-        objections, history = _parse_notes(notes)
+        objections, history, stances = _parse_notes(notes)
 
         return Opportunity(
             id=deal["id"],
@@ -134,7 +136,9 @@ class HubSpotCrmAdapter:
             stage=properties.get("dealstage") or "discovery",
             probability=_to_int(properties.get("hs_deal_stage_probability")),
             amount=_to_float(properties.get("amount")),
-            stakeholders=tuple(_to_stakeholder(props) for props in contacts.values()),
+            stakeholders=_merge_stances(
+                tuple(_to_stakeholder(props) for props in contacts.values()), stances
+            ),
             objections=objections,
             history=history,
             last_activity_at=_from_millis(properties.get("hs_lastmodifieddate")),
@@ -143,8 +147,8 @@ class HubSpotCrmAdapter:
         )
 
     def _batch_read(self, object_type: str, ids: list[str], properties: list[str]) -> dict:
-        """`?associations=` ne fonctionne pas sur les endpoints batch — d'où ces appels
-        d'hydratation séparés."""
+        """`?associations=` does not work on batch endpoints — hence these separate
+        hydration calls."""
         if not ids:
             return {}
         payload = self._http.request(
@@ -154,7 +158,7 @@ class HubSpotCrmAdapter:
         )
         return {row["id"]: row.get("properties", {}) for row in payload.get("results", [])}
 
-    # -- Écriture -----------------------------------------------------------------
+    # -- Writes -------------------------------------------------------------------
 
     def record_interaction(self, opportunity_id: str, interaction: Interaction) -> None:
         self._create_note(
@@ -175,8 +179,8 @@ class HubSpotCrmAdapter:
         if stage:
             properties["dealstage"] = stage
         if properties:
-            # Depuis 2026-09, HubSpot applique les règles de validation de l'admin sur les
-            # écritures : un refus peut être métier, pas seulement technique.
+            # Since 2026-09, HubSpot enforces admin-configured validation rules on writes: a
+            # rejection can be a business-level one, not merely a technical failure.
             self._http.request(
                 "PATCH",
                 f"/crm/v3/objects/deals/{opportunity_id}",
@@ -199,6 +203,29 @@ class HubSpotCrmAdapter:
                 probability,
             )
 
+    def update_stakeholder(
+        self,
+        opportunity_id: str,
+        *,
+        name: str,
+        stance: Stance,
+        role: str = "",
+        notes: str = "",
+    ) -> None:
+        """Written as a prefixed note, like objections.
+
+        HubSpot has no standard property carrying "who blocks this deal": a custom property
+        would have to be created in every customer portal. A note is readable by the rep in the
+        interface and re-parsable by the agent on the next scan — the same single source of
+        truth, with nothing to configure.
+        """
+        segments = [f"{name.strip()}", f"posture : {stance.value}"]
+        if role.strip():
+            segments.insert(1, f"rôle : {role.strip()}")
+        if notes.strip():
+            segments.append(notes.strip())
+        self._create_note(opportunity_id, f"[PARTIE-PRENANTE] {' | '.join(segments)}")
+
     def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
         if not objection_id:
             return False
@@ -206,11 +233,11 @@ class HubSpotCrmAdapter:
         return True
 
     def find_opportunity_by_phone(self, phone_number: str) -> str | None:
-        """Recherche indexée côté HubSpot, puis association contact → deal.
+        """Indexed search on the HubSpot side, then contact → deal association.
 
-        Deux à trois appels au total. L'alternative — parcourir le portefeuille et comparer
-        les numéros en local — coûterait des centaines d'appels par message entrant, contre un
-        quota de recherche plafonné à 4 requêtes/seconde.
+        Two to three calls in total. The alternative — walking the book of business and
+        comparing numbers locally — would cost hundreds of calls per inbound message, against
+        a search quota capped at 4 requests/second.
         """
         variants = _phone_variants(phone_number)
         if not variants:
@@ -220,8 +247,8 @@ class HubSpotCrmAdapter:
             "POST",
             "/crm/v3/objects/contacts/search",
             json={
-                # Des groupes de filtres séparés s'interprètent comme un OU : on interroge
-                # les deux propriétés téléphoniques pour chaque écriture plausible du numéro.
+                # Separate filter groups are interpreted as an OR: we query both phone
+                # properties for every plausible spelling of the number.
                 "filterGroups": [
                     {"filters": [{"propertyName": prop, "operator": "EQ", "value": variant}]}
                     for variant in variants
@@ -283,7 +310,7 @@ class HubSpotCrmAdapter:
         )
 
 
-# -- Traduction HubSpot → domaine -------------------------------------------------
+# -- HubSpot → domain translation -------------------------------------------------
 
 
 def _to_snapshot(row: dict) -> DealSnapshot:
@@ -296,6 +323,86 @@ def _to_snapshot(row: dict) -> DealSnapshot:
         or datetime.now(UTC),
         amount=_to_float(properties.get("amount")),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _StakeholderNote:
+    """One stance note, already parsed. `key` is the name used for matching."""
+
+    key: str
+    name: str
+    stance: Stance
+    role: str
+    notes: str
+    noted_at: datetime
+
+
+def _parse_stakeholder_note(body: str, occurred_at: datetime) -> _StakeholderNote | None:
+    """`Nom | rôle : X | posture : Y | notes`, the `rôle` and notes segments being optional."""
+    segments = [segment.strip() for segment in body.split("|") if segment.strip()]
+    if not segments:
+        return None
+
+    name = segments[0]
+    role, notes, stance = "", [], Stance.UNKNOWN
+
+    for segment in segments[1:]:
+        lowered = segment.casefold()
+        if lowered.startswith("posture :"):
+            stance = _parse_stance(segment.split(":", 1)[1])
+        elif lowered.startswith("rôle :") or lowered.startswith("role :"):
+            role = segment.split(":", 1)[1].strip()
+        else:
+            notes.append(segment)
+
+    return _StakeholderNote(
+        key=name.casefold(),
+        name=name,
+        stance=stance,
+        role=role,
+        notes=" | ".join(notes),
+        noted_at=occurred_at,
+    )
+
+
+def _parse_stance(raw: str) -> Stance:
+    try:
+        return Stance(raw.strip().casefold())
+    except ValueError:
+        return Stance.UNKNOWN
+
+
+def _merge_stances(
+    contacts: tuple[Stakeholder, ...], stances: dict[str, _StakeholderNote]
+) -> tuple[Stakeholder, ...]:
+    """Applies what the agent learned on top of the contacts read from HubSpot.
+
+    A note whose name matches no contact becomes a stakeholder of its own, without contact
+    details: the CFO who decides the budget and has never been contacted belongs on the map,
+    precisely because nobody has spoken to them.
+    """
+    remaining = dict(stances)
+    merged: list[Stakeholder] = []
+
+    for contact in contacts:
+        note = remaining.pop(contact.name.casefold(), None)
+        if note is None:
+            merged.append(contact)
+            continue
+        merged.append(
+            replace(
+                contact,
+                stance=note.stance,
+                role=note.role or contact.role,
+                notes=note.notes or contact.notes,
+            )
+        )
+
+    merged.extend(
+        Stakeholder(name=note.name, role=note.role, stance=note.stance, notes=note.notes)
+        for note in remaining.values()
+    )
+    return tuple(merged)
 
 
 def _to_stakeholder(properties: dict) -> Stakeholder:
@@ -311,16 +418,23 @@ def _to_stakeholder(properties: dict) -> Stakeholder:
     )
 
 
-def _parse_notes(notes: dict) -> tuple[tuple[Objection, ...], tuple[Interaction, ...]]:
-    """Relit ce que l'agent a écrit lors des cycles précédents.
+def _parse_notes(
+    notes: dict,
+) -> tuple[tuple[Objection, ...], tuple[Interaction, ...], dict[str, _StakeholderNote]]:
+    """Reads back what the agent wrote during previous cycles.
 
-    Deux passes : on collecte d'abord les résolutions, puis on marque les objections
-    correspondantes. Sans cela, une objection notée avant sa résolution resterait ouverte —
-    et l'ordre des notes n'est pas garanti par l'API.
+    Two passes: resolutions are collected first, then the matching objections are marked.
+    Without that, an objection noted before its resolution would stay open — and the API does
+    not guarantee the ordering of notes.
+
+    Stakeholder notes are collapsed to one per person, the most recent winning: a stance is
+    meant to move (neutral, then champion, then blocker once the budget is refused), and it is
+    the latest reading that matters.
     """
     raw_objections: list[Objection] = []
     resolutions: dict[str, str] = {}
     history: list[Interaction] = []
+    stances: dict[str, _StakeholderNote] = {}
 
     for properties in notes.values():
         body = (properties.get("hs_note_body") or "").strip()
@@ -346,6 +460,15 @@ def _parse_notes(notes: dict) -> tuple[tuple[Objection, ...], tuple[Interaction,
             )
             continue
 
+        stakeholder = _STAKEHOLDER_RE.match(body)
+        if stakeholder:
+            parsed = _parse_stakeholder_note(stakeholder.group(1), occurred_at)
+            if parsed is not None:
+                known = stances.get(parsed.key)
+                if known is None or parsed.noted_at >= known.noted_at:
+                    stances[parsed.key] = parsed
+            continue
+
         summary = body
         if body.startswith(INTERACTION_PREFIX):
             summary = body[len(INTERACTION_PREFIX) :].strip()
@@ -361,7 +484,7 @@ def _parse_notes(notes: dict) -> tuple[tuple[Objection, ...], tuple[Interaction,
     )
 
     history.sort(key=lambda item: item.occurred_at)
-    return objections, tuple(history)
+    return objections, tuple(history), stances
 
 
 def _call_body(outcome: CallOutcome) -> str:
@@ -376,19 +499,19 @@ def _call_body(outcome: CallOutcome) -> str:
 
 
 def _phone_variants(phone_number: str) -> list[str]:
-    """Écritures plausibles d'un même numéro, pour une recherche par égalité stricte.
+    """Plausible spellings of one and the same number, for a strict-equality search.
 
-    HubSpot compare les propriétés téléphoniques telles qu'elles ont été saisies, et un CRM
-    contient « +33 6 00 00 00 01 » aussi bien que « 0600000001 ». On interroge donc plusieurs
-    formes plutôt que de comparer des suffixes de chiffres en local — un rapprochement sur les
-    derniers chiffres produirait des faux positifs entre prospects distincts.
+    HubSpot compares phone properties exactly as they were entered, and a CRM holds
+    "+33 6 00 00 00 01" just as readily as "0600000001". So we query several forms rather than
+    comparing digit suffixes locally — matching on trailing digits would produce false
+    positives between distinct prospects.
     """
     digits = "".join(character for character in phone_number if character.isdigit())
     if len(digits) < 8:
         return []
 
     variants = {digits, f"+{digits}"}
-    # Numéro national français reconstruit depuis l'international, et réciproquement.
+    # French national number reconstructed from the international form, and vice versa.
     if digits.startswith("33") and len(digits) == 11:
         variants.add(f"0{digits[2:]}")
     elif digits.startswith("0") and len(digits) == 10:

@@ -1,12 +1,11 @@
-"""Handoff vers HubSpot — une tâche assignée sur le deal.
+"""Handoff to HubSpot — a task assigned on the deal.
 
-C'est la destination la plus native qui soit : le commercial la retrouve dans sa file de
-tâches, à l'endroit où il travaille déjà, associée au deal donc à un clic de tout le contexte.
-Rien à installer, rien à consulter en plus.
+This is as native a destination as it gets: the sales rep finds it in their task queue, right
+where they already work, associated with the deal and therefore one click away from the whole
+context. Nothing to install, nothing extra to check.
 
-La tâche est assignée au **propriétaire du deal** quand HubSpot en déclare un. Un brief qui
-atterrit dans une file d'attente commune n'est traité par personne ; adressé à la personne
-responsable du dossier, il l'est.
+The task is assigned to the **deal owner** whenever HubSpot declares one. A brief that lands in
+a shared queue is handled by nobody; addressed to the person responsible for the deal, it is.
 """
 
 from __future__ import annotations

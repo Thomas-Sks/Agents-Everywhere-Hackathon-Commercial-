@@ -1,15 +1,15 @@
-"""Registre des actions commerciales — l'ensemble de ce que l'agent sait faire.
+"""Registry of sales actions — everything the agent knows how to do.
 
-Deux pilotes consomment ce registre :
+Two drivers consume this registry:
 
-* le moteur de décision LLM, qui expose chaque action comme un tool LangGraph ;
-* le webhook Retell, appelé pendant un appel téléphonique, quand c'est l'agent vocal qui
-  décide d'exécuter une action.
+* the LLM decision engine, which exposes every action as a LangGraph tool;
+* the Retell webhook, called during a phone call, when it is the voice agent deciding to
+  execute an action.
 
-Les deux doivent produire exactement le même effet — d'où un registre unique plutôt que deux
-implémentations parallèles vouées à diverger. Toute action est nommée, résout ses coordonnées
-depuis le CRM, et consigne systématiquement sa trace : une action dont il ne reste rien dans
-le CRM n'a pas eu lieu du point de vue du commercial humain.
+Both must produce exactly the same effect — hence a single registry rather than two parallel
+implementations doomed to drift apart. Every action is named, resolves its contact details from
+the CRM, and systematically records its trace: an action that leaves nothing behind in the CRM
+never happened as far as the human sales rep is concerned.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from revenue_agent.config import PolicySettings
 from revenue_agent.domain import policy
 from revenue_agent.domain.approvals import PendingApproval
 from revenue_agent.domain.errors import ChannelUnavailable
-from revenue_agent.domain.models import Channel, Interaction, Objection, Opportunity
+from revenue_agent.domain.models import Channel, Interaction, Objection, Opportunity, Stance
 from revenue_agent.domain.policy import ActionKind, OutboundAction, Verdict
 from revenue_agent.domain.review import MessageUnderReview
 from revenue_agent.domain.triage import KnownDealState
@@ -66,7 +66,7 @@ class ActionRegistry:
         self._reviewer = reviewer
         self._policy = policy_settings
 
-    # -- Lecture ------------------------------------------------------------------
+    # -- Reads --------------------------------------------------------------------
 
     def get_opportunity_context(self, opportunity_id: str) -> str:
         opportunity = self._crm.load_opportunity(opportunity_id)
@@ -116,7 +116,7 @@ class ActionRegistry:
             indent=2,
         )
 
-    # -- Écriture CRM -------------------------------------------------------------
+    # -- CRM writes ---------------------------------------------------------------
 
     def record_interaction(self, opportunity_id: str, channel: str, summary: str) -> str:
         self._crm.record_interaction(
@@ -157,11 +157,48 @@ class ActionRegistry:
         )
         return "Opportunité mise à jour dans le CRM."
 
-    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> str:
-        """Clôt une objection traitée.
+    def update_stakeholder(
+        self,
+        opportunity_id: str,
+        name: str,
+        stance: str,
+        role: str = "",
+        notes: str = "",
+    ) -> str:
+        """Record who decides, who influences, who blocks.
 
-        Sans cette action, une objection restait ouverte à vie : le contexte se polluait à
-        chaque cycle et le routage par enjeu restait épinglé sur le modèle le plus cher.
+        The prompt asks the agent to keep this map up to date; without this action it could
+        only ever read it. A stance observed on a call and never written down is lost at the
+        next cycle — and the deal keeps looking healthy because nobody recorded that the budget
+        holder is against it.
+        """
+        parsed = _parse_stance(stance)
+        if parsed is None:
+            valid = ", ".join(option.value for option in Stance)
+            return f"Posture '{stance}' inconnue. Valeurs acceptées : {valid}."
+
+        if not name.strip():
+            return "Le nom de l'interlocuteur est obligatoire."
+
+        self._crm.update_stakeholder(
+            opportunity_id,
+            name=name.strip(),
+            stance=parsed,
+            role=role.strip(),
+            notes=notes.strip(),
+        )
+        self._trace(
+            opportunity_id,
+            Channel.DECISION,
+            f"Partie prenante mise à jour : {name.strip()} — posture {parsed.value}",
+        )
+        return f"{name.strip()} enregistré(e) comme « {parsed.value} » dans le CRM."
+
+    def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> str:
+        """Close an objection that has been dealt with.
+
+        Without this action an objection stayed open forever: the context was polluted on every
+        cycle and stakes-based routing remained pinned to the most expensive model.
         """
         if not self._crm.resolve_objection(opportunity_id, objection_id, resolution):
             return (
@@ -243,7 +280,7 @@ class ActionRegistry:
         )
         return f"Appel en cours vers {phone} (call_id={call_id})."
 
-    # -- Garde-fous ---------------------------------------------------------------
+    # -- Guardrails ---------------------------------------------------------------
 
     def _guard(
         self,
@@ -254,11 +291,11 @@ class ActionRegistry:
         content: str,
         payload: dict[str, str],
     ) -> str | None:
-        """Applique la politique avant toute action sortante.
+        """Apply the policy before any outbound action.
 
-        Retourne `None` si l'action peut partir, sinon le message à rendre au modèle. On rend
-        un message plutôt qu'une exception pour que l'agent puisse s'adapter — réécrire sans
-        la remise, choisir un autre canal — au lieu de subir un plantage opaque.
+        Returns `None` if the action may go out, otherwise the message to hand back to the
+        model. We return a message rather than an exception so the agent can adapt — rewrite
+        without the discount, pick another channel — instead of hitting an opaque crash.
         """
         review = (
             self._reviewer.review(_under_review(opportunity, kind, content))
@@ -315,8 +352,8 @@ class ActionRegistry:
                 payload=payload,
             )
         )
-        # Une action retenue dont personne n'est informé n'est pas « en attente », elle est
-        # perdue. La notification est donc indissociable de la mise en file.
+        # A held action nobody is told about is not "pending", it is lost. The
+        # notification is therefore inseparable from placing it in the queue.
         try:
             self._handoff.notify_pending_approval(
                 opportunity=opportunity,
@@ -325,7 +362,7 @@ class ActionRegistry:
                 reason=decision.reason,
                 preview=" ".join(payload.values()),
             )
-        except Exception:  # noqa: BLE001 - l'action reste en file même si le ping échoue
+        except Exception:  # noqa: BLE001 - the action stays queued even if the ping fails
             logger.exception("Notification de validation non remise pour %s", approval.id)
 
         return (
@@ -341,8 +378,8 @@ class ActionRegistry:
         self._trace(opportunity_id, channel, summary)
 
     def execute_approved(self, approval: PendingApproval) -> str:
-        """Rejoue une action validée par un humain, en contournant les règles de validation
-        mais pas les blocages d'exploitation (mode simulation, destinataires autorisés)."""
+        """Replay an action approved by a human, bypassing the approval rules but not the
+        operational blocks (simulated mode, allow-listed recipients)."""
         opportunity = self._crm.load_opportunity(approval.opportunity_id)
         content = " ".join(approval.payload.values())
 
@@ -388,7 +425,7 @@ class ActionRegistry:
         self._after_send(approval.opportunity_id, channel, summary)
         return summary
 
-    # -- Décisions ----------------------------------------------------------------
+    # -- Decisions ----------------------------------------------------------------
 
     def schedule_follow_up(self, opportunity_id: str, reason: str, due_date: str) -> str:
         due_at = _parse_date(due_date)
@@ -420,7 +457,7 @@ class ActionRegistry:
         )
         return "Dossier transmis à un commercial humain avec le contexte complet."
 
-    # -- Interne ------------------------------------------------------------------
+    # -- Internal -----------------------------------------------------------------
 
     def _trace(self, opportunity_id: str, channel: Channel, summary: str) -> None:
         self._crm.record_interaction(
@@ -430,7 +467,7 @@ class ActionRegistry:
         self._remember_decision(opportunity_id)
 
     def _remember_decision(self, opportunity_id: str) -> None:
-        """Nourrit la règle d'inactivité du triage."""
+        """Feeds the triage inactivity rule."""
         known = self._scan_state.get_known_states().get(opportunity_id, KnownDealState())
         self._scan_state.upsert_known_state(
             opportunity_id,
@@ -443,10 +480,10 @@ class ActionRegistry:
 
 
 def serialise_opportunity(opportunity: Opportunity) -> dict:
-    """Vue de l'opportunité telle qu'exposée au modèle.
+    """The opportunity as exposed to the model.
 
-    Les canaux joignables sont explicites : l'agent doit savoir ce qu'il peut faire avant de
-    choisir quoi faire.
+    Reachable channels are explicit: the agent has to know what it *can* do before choosing
+    what to do.
     """
     channels = opportunity.reachable_channels()
     return {
@@ -469,8 +506,8 @@ def serialise_opportunity(opportunity: Opportunity) -> dict:
         ],
         "objections_ouvertes": [
             {
-                # L'identifiant est exposé pour que l'agent puisse clore l'objection
-                # précisément, sans se fier à une correspondance de texte.
+                # The identifier is exposed so the agent can close the objection
+                # precisely, without relying on a text match.
                 "id": objection.id,
                 "texte": objection.text,
                 "cause_probable": objection.root_cause,
@@ -497,8 +534,8 @@ def serialise_opportunity(opportunity: Opportunity) -> dict:
 
 
 def _under_review(opportunity: Opportunity, kind: ActionKind, content: str) -> MessageUnderReview:
-    """Le relecteur juge le message dans son contexte : la même phrase n'a pas le même poids
-    au premier contact et en fin de négociation."""
+    """The reviewer judges the message in context: the same sentence does not carry the same
+    weight on first contact and at the end of a negotiation."""
     return MessageUnderReview(
         channel=kind.value,
         company=opportunity.company,
@@ -512,6 +549,15 @@ def _under_review(opportunity: Opportunity, kind: ActionKind, content: str) -> M
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _parse_stance(raw: str) -> Stance | None:
+    """Unlike channels, an unknown stance is not silently downgraded: a wrong stance corrupts
+    the stakeholder map, so the model is told instead."""
+    try:
+        return Stance(raw.strip().casefold())
+    except (ValueError, AttributeError):
+        return None
 
 
 def _parse_channel(raw: str) -> Channel:

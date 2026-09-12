@@ -1,12 +1,12 @@
-"""Page d'arbitrage — sortir la validation du terminal.
+"""Arbitration page — taking approval out of the terminal.
 
-Une file de validation qui ne se consulte qu'en ligne de commande n'est pas consultée : le
-commercial qui reçoit un ping Teams sur son téléphone ne va pas ouvrir un shell. Cette page est
-donc le maillon qui rend le contrôle réellement exerçable — elle s'ouvre depuis le lien de la
-notification, montre **le message exact qui partira**, et propose deux boutons.
+An approval queue that can only be consulted from the command line does not get consulted: the
+sales rep who gets a Teams ping on their phone is not going to open a shell. This page is
+therefore the link that makes control genuinely exercisable — it opens from the notification's
+link, shows **the exact message that will go out**, and offers two buttons.
 
-Volontairement sans dépendance : un seul fichier HTML autonome, aucun framework, aucun CDN.
-La surface de contrôle d'actions sortantes réelles doit être aussi petite que possible.
+Deliberately dependency-free: a single self-contained HTML file, no framework, no CDN. The
+control surface for real outbound actions should be as small as possible.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ function escapeHtml(texte) {
 
 
 def render(approvals: list[PendingApproval], token: str, company_name: str) -> str:
-    """Page complète. `token` est réinjecté dans les appels d'arbitrage."""
+    """The full page. `token` is re-injected into the arbitration calls."""
     if approvals:
         cards = "\n".join(_card(approval) for approval in approvals)
         count = (

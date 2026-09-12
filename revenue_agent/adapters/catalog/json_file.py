@@ -1,10 +1,10 @@
-"""Catalogue produit sur fichier JSON — implémente `CatalogPort`.
+"""Product catalogue on a JSON file — implements `CatalogPort`.
 
-Les prix et caractéristiques viennent d'ici et jamais du modèle : une hallucination de prix
-dans un email commercial est une erreur qui coûte de l'argent, pas un détail de style.
+Prices and features come from here and never from the model: a hallucinated price in a sales
+email is a mistake that costs money, not a matter of style.
 
-Le fichier peut être alimenté par `scripts/load_dataset.py` depuis `products.csv` du dataset
-Kaggle « CRM Sales Opportunities ».
+The file can be populated by `scripts/load_dataset.py` from `products.csv` of the Kaggle
+"CRM Sales Opportunities" dataset.
 """
 
 from __future__ import annotations

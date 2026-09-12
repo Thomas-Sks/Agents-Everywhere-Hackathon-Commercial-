@@ -1,8 +1,8 @@
-"""Relecture des messages sortants — socle lexical, jugement sémantique, superposition.
+"""Review of outbound messages — lexical baseline, semantic judgement, layering.
 
-Le jugement du modèle n'est pas testé ici (ce serait tester OpenAI) : ce qui est testé, c'est
-que notre code se comporte correctement **autour** de lui — qu'un modèle absent, lent ou
-incohérent ne se traduise jamais par un message qui part sans relecture.
+The model's judgement is not tested here (that would be testing OpenAI): what is tested is that
+our code behaves correctly **around** it — that an absent, slow or incoherent model never
+results in a message going out unreviewed.
 """
 
 from __future__ import annotations
@@ -34,37 +34,37 @@ class StubReviewer:
         return self.finding
 
 
-# -- Socle lexical ------------------------------------------------------------------
+# -- Lexical baseline ---------------------------------------------------------------
 
 
-def test_le_socle_attrape_ce_qui_se_nomme():
+def test_the_baseline_catches_what_names_itself():
     finding = LexicalMessageReviewer().review(message("Je vous propose une remise de 15 %."))
 
     assert finding.requires_human is True
     assert finding.category is ReviewCategory.PRICE_COMMITMENT
 
 
-def test_le_socle_cite_la_phrase_en_cause():
-    """Un relecteur pointe la ligne, il ne dit pas seulement « ce message m'ennuie »."""
+def test_the_baseline_quotes_the_offending_sentence():
+    """A reviewer points at the line, they do not merely say "this message bothers me"."""
     content = "Bonjour Julie. Je peux vous faire une remise. À bientôt."
 
     finding = LexicalMessageReviewer().review(message(content))
 
     assert "remise" in finding.quote
-    assert finding.quote != content, "on cite la phrase, pas tout le message"
+    assert finding.quote != content, "we quote the sentence, not the whole message"
 
 
-def test_le_socle_laisse_passer_un_message_anodin():
+def test_the_baseline_lets_an_innocuous_message_through():
     finding = LexicalMessageReviewer().review(message("Seriez-vous disponible mardi à 14 h ?"))
 
     assert finding.requires_human is False
 
 
-# -- Superposition ------------------------------------------------------------------
+# -- Layering -----------------------------------------------------------------------
 
 
-def test_le_semantique_nest_pas_appele_si_le_socle_a_deja_tranche():
-    """Économie d'un appel de modèle : une règle certaine n'a pas besoin de confirmation."""
+def test_the_semantic_layer_is_not_called_when_the_baseline_already_ruled():
+    """Saves a model call: a certain rule does not need confirmation."""
     semantic = StubReviewer(ReviewFinding.clear())
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=semantic)
 
@@ -74,8 +74,8 @@ def test_le_semantique_nest_pas_appele_si_le_socle_a_deja_tranche():
     assert semantic.calls == []
 
 
-def test_le_semantique_rattrape_ce_que_le_socle_ne_voit_pas():
-    """« Je m'aligne sur leur tarif » n'est pas dans le dictionnaire, et engage pourtant."""
+def test_the_semantic_layer_catches_what_the_baseline_cannot_see():
+    """"I'll match their price" is not in the dictionary, and yet it commits the company."""
     semantic = StubReviewer(
         ReviewFinding.escalate(
             ReviewCategory.PRICE_COMMITMENT,
@@ -89,16 +89,16 @@ def test_le_semantique_rattrape_ce_que_le_socle_ne_voit_pas():
 
     assert finding.requires_human is True
     assert finding.category is ReviewCategory.PRICE_COMMITMENT
-    assert semantic.calls, "le sémantique doit être consulté quand le socle laisse passer"
+    assert semantic.calls, "the semantic layer must be consulted when the baseline lets it pass"
 
 
-def test_sans_relecteur_semantique_le_socle_fait_foi():
+def test_without_a_semantic_reviewer_the_baseline_has_the_final_say():
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=None)
 
     assert reviewer.review(message("Bonjour, disponible jeudi ?")).requires_human is False
 
 
-def test_un_message_valide_par_les_deux_couches_passe():
+def test_a_message_cleared_by_both_layers_goes_through():
     reviewer = LayeredMessageReviewer(
         lexical=LexicalMessageReviewer(), semantic=StubReviewer(ReviewFinding.clear())
     )
@@ -106,11 +106,11 @@ def test_un_message_valide_par_les_deux_couches_passe():
     assert reviewer.review(message("Je vous envoie l'étude de cas.")).requires_human is False
 
 
-# -- Échec fermé --------------------------------------------------------------------
+# -- Fail closed --------------------------------------------------------------------
 
 
-def test_un_relecteur_en_panne_retient_le_message():
-    """Le point le plus important : un relecteur absent ne veut pas dire un message validé."""
+def test_a_reviewer_that_is_down_holds_the_message():
+    """The most important point: an absent reviewer does not mean an approved message."""
 
     class BrokenReviewer:
         def review(self, msg):
@@ -123,8 +123,8 @@ def test_un_relecteur_en_panne_retient_le_message():
     assert reviewer.review(message("Bonjour Julie.")).requires_human is True
 
 
-def test_le_contexte_est_transmis_au_relecteur():
-    """La même phrase ne se juge pas pareil au premier contact et en fin de négociation."""
+def test_the_context_is_passed_to_the_reviewer():
+    """The same sentence is not judged the same way on first contact and late in a negotiation."""
     semantic = StubReviewer(ReviewFinding.clear())
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=semantic)
 
@@ -135,19 +135,19 @@ def test_le_contexte_est_transmis_au_relecteur():
     assert transmitted.amount == 40_000.0
 
 
-# -- Lecture de la réponse du modèle ------------------------------------------------
+# -- Reading the model's response ---------------------------------------------------
 #
-# Un modèle ne répond pas toujours du JSON nu : il l'encadre, le commente, ou déraille.
-# Ces cas sont la principale source de panne silencieuse d'un classifieur en production.
+# A model does not always return bare JSON: it wraps it, comments on it, or goes off the rails.
+# These cases are the main source of silent failure for a classifier in production.
 
 
-def test_json_nu():
+def test_bare_json():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
     assert _extract_json('{"requires_human": false}') == {"requires_human": False}
 
 
-def test_json_dans_un_bloc_de_code():
+def test_json_inside_a_code_block():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
     payload = _extract_json('Voici mon verdict :\n```json\n{"requires_human": true}\n```')
@@ -155,7 +155,7 @@ def test_json_dans_un_bloc_de_code():
     assert payload == {"requires_human": True}
 
 
-def test_json_noye_dans_du_texte():
+def test_json_buried_in_prose():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
     payload = _extract_json('Après relecture, {"requires_human": true} me semble juste.')
@@ -163,13 +163,13 @@ def test_json_noye_dans_du_texte():
     assert payload == {"requires_human": True}
 
 
-def test_reponse_illisible_ne_devine_pas_un_verdict():
+def test_an_unreadable_response_does_not_guess_a_verdict():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
     assert _extract_json("Je ne peux pas répondre.") is None
 
 
-def test_categorie_inconnue_ne_fait_pas_planter():
+def test_an_unknown_category_does_not_crash():
     from revenue_agent.adapters.intelligence.llm_reviewer import _parse_category
 
     assert _parse_category("catégorie_inventée_par_le_modèle") is ReviewCategory.NONE

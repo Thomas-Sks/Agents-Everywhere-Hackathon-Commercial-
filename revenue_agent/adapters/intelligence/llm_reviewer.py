@@ -1,21 +1,21 @@
-"""Relecture sémantique — un directeur commercial relit le message avant envoi.
+"""Semantic review — a sales director reads the message before it goes out.
 
-Ce que la couche lexicale ne peut pas voir : « je m'aligne sur leur tarif », « on trouvera un
-terrain d'entente », « je vous garantis un retour sur investissement en six mois ». Ces phrases
-engagent l'entreprise sans contenir aucun mot-clé.
+What the lexical layer cannot see: "I'll match their price", "we'll find common ground", "I
+guarantee you a return on investment within six months". Those sentences commit the company
+without containing a single keyword.
 
-Trois partis pris :
+Three deliberate positions:
 
-**Le modèle le moins cher.** Une relecture par action sortante, sur un prompt court : c'est
-exactement le profil « fort volume, latence contrainte » pour lequel le tier économique existe.
-Le surcoût est de l'ordre de 0,0003 $ par message.
+**The cheapest model.** One review per outbound action, on a short prompt: exactly the "high
+volume, latency-constrained" profile the economy tier exists for. The extra cost is on the order
+of $0.0003 per message.
 
-**Échec fermé.** Si le modèle ne répond pas, répond mal, ou renvoie du JSON invalide, on
-considère que le message doit être relu par un humain. Un relecteur absent ne signifie pas que
-le message est bon — il signifie qu'il n'a pas été relu.
+**Fail closed.** If the model does not answer, answers badly, or returns invalid JSON, we treat
+the message as one that must be reviewed by a human. An absent reviewer does not mean the
+message is fine — it means it has not been reviewed.
 
-**Le contexte est fourni.** La même phrase est anodine au premier contact et grave en fin de
-négociation. Le modèle reçoit le stade, le montant et les objections ouvertes.
+**The context is provided.** The same sentence is innocuous on first contact and serious late in
+a negotiation. The model receives the stage, the amount and the open objections.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class LlmMessageReviewer:
                 ]
             )
             payload = _extract_json(_as_text(response.content))
-        except Exception as exc:  # noqa: BLE001 - toute défaillance doit fermer, pas ouvrir
+        except Exception as exc:  # noqa: BLE001 - any failure must close, never open
             logger.warning("Relecture indisponible (%s) — le message est retenu", exc)
             return ReviewFinding.escalate(
                 category=ReviewCategory.NONE,
@@ -112,7 +112,7 @@ def _as_text(content) -> str:
 
 
 def _extract_json(text: str) -> dict | None:
-    """Tolère un bloc de code ou une phrase autour du JSON, sans jamais deviner le verdict."""
+    """Tolerates a code fence or prose around the JSON, without ever guessing the verdict."""
     candidate = text.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", candidate, re.DOTALL)
     if fenced:

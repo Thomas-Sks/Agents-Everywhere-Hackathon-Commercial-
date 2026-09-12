@@ -1,8 +1,8 @@
-"""Port d'état opérationnel du scanner.
+"""Port for the scanner's operational state.
 
-À ne pas confondre avec le CRM : le CRM est la vérité commerciale (partagée avec les humains),
-cet état est la mémoire d'exécution de l'agent (où en était le dernier scan, quelles relances
-sont programmées). Les deux ont des cycles de vie différents et ne doivent pas se mélanger.
+Not to be confused with the CRM: the CRM is the sales truth (shared with humans), this state is
+the agent's execution memory (where the last scan got to, which follow-ups are scheduled). The
+two have different lifecycles and must not be mixed.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from revenue_agent.domain.triage import KnownDealState
 
 class ScanStatePort(Protocol):
     def get_pointer(self) -> datetime | None:
-        """Horodatage du dernier scan réussi, ou None au tout premier démarrage."""
+        """Timestamp of the last successful scan, or None on the very first start-up."""
         ...
 
     def set_pointer(self, moment: datetime) -> None: ...
@@ -25,7 +25,7 @@ class ScanStatePort(Protocol):
     def upsert_known_state(self, opportunity_id: str, state: KnownDealState) -> None: ...
 
     def schedule_follow_up(self, opportunity_id: str, due_at: datetime) -> None:
-        """Programme une reprise. Consommée par le triage quand l'échéance est atteinte."""
+        """Schedules a re-engagement. Consumed by triage once the due date is reached."""
         ...
 
     def clear_follow_up(self, opportunity_id: str) -> None: ...

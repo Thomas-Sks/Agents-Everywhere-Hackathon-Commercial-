@@ -1,7 +1,7 @@
-"""Configuration applicative — source unique de vérité pour l'environnement.
+"""Application configuration — the single source of truth for the environment.
 
-Chargée une fois au démarrage et validée immédiatement : un déploiement mal configuré doit
-échouer au boot, pas au premier appel client.
+Loaded once at start-up and validated immediately: a misconfigured deployment must fail at
+boot, not on the first customer request.
 """
 
 from __future__ import annotations
@@ -12,15 +12,15 @@ from enum import StrEnum
 
 
 class ConfigurationError(RuntimeError):
-    """Configuration invalide — levée au démarrage, jamais en cours de requête."""
+    """Invalid configuration — raised at start-up, never mid-request."""
 
 
 def _load_dotenv() -> None:
-    """Charge un fichier `.env` s'il existe, sans écraser l'environnement déjà défini.
+    """Loads a `.env` file if one exists, without overriding the existing environment.
 
-    L'ordre de priorité compte : une variable exportée dans le shell ou injectée par
-    l'orchestrateur (Trigger.dev, conteneur) doit toujours l'emporter sur le fichier local,
-    sinon un `.env` oublié sur une machine de développement contaminerait un déploiement.
+    The order of precedence matters: a variable exported in the shell or injected by the
+    orchestrator (Trigger.dev, a container) must always win over the local file, otherwise a
+    `.env` left lying around on a development machine would contaminate a deployment.
     """
     from dotenv import load_dotenv
 
@@ -121,14 +121,15 @@ class RetellSettings:
 
 @dataclass(frozen=True)
 class HandoffSettings:
-    """Où atteindre un humain.
+    """Where to reach a human.
 
-    `public_base_url` est l'URL publique de cette API (tunnel ngrok en démo) : elle sert à
-    construire le lien d'arbitrage envoyé dans les notifications. Sans elle, un destinataire
-    reçoit l'information mais n'a aucun moyen d'agir.
+    `public_base_url` is the public URL of this API (an ngrok tunnel in a demo): it is used to
+    build the arbitration link sent in notifications. Without it, a recipient gets the
+    information but has no way to act on it.
     """
 
     teams_webhook_url: str = ""
+    whatsapp_recipients: tuple[str, ...] = ()
     hubspot_owner_id: str = ""
     public_base_url: str = ""
     approval_ui_token: str = ""
@@ -136,6 +137,10 @@ class HandoffSettings:
     @property
     def teams_enabled(self) -> bool:
         return bool(self.teams_webhook_url)
+
+    @property
+    def whatsapp_enabled(self) -> bool:
+        return bool(self.whatsapp_recipients)
 
     def approval_url(self, approval_id: str = "") -> str:
         if not self.public_base_url or not self.approval_ui_token:
@@ -155,12 +160,12 @@ class ExaSettings:
 
 @dataclass(frozen=True)
 class ScanSettings:
-    """Paramètres du scan périodique du CRM.
+    """Settings for the periodic CRM scan.
 
-    `overlap_minutes` compense l'*eventual consistency* de l'index de recherche HubSpot : on
-    relit systématiquement un peu avant le dernier pointeur, et on déduplique par id.
-    `max_decisions_per_scan` borne le coût LLM d'un tick : le triage peut remonter 200 leads,
-    on n'en traite qu'un nombre connu d'avance.
+    `overlap_minutes` compensates for the *eventual consistency* of HubSpot's search index: we
+    systematically re-read a little before the last pointer, and dedupe by id.
+    `max_decisions_per_scan` bounds the LLM cost of a single tick: triage may surface 200 leads,
+    but we only process a number known in advance.
     """
 
     overlap_minutes: int = 5
@@ -171,12 +176,12 @@ class ScanSettings:
 
 
 class AgentMode(StrEnum):
-    """Niveau d'autonomie accordé à l'agent.
+    """The level of autonomy granted to the agent.
 
-    Le défaut est `SUPERVISED` et c'est délibéré : un système qui écrit à de vrais prospects
-    et passe de vrais appels doit être verrouillé à l'installation, l'autonomie s'accordant
-    explicitement. L'inverse — livrer autonome et compter sur l'opérateur pour restreindre —
-    fait porter le coût de l'erreur au prospect.
+    The default is `SUPERVISED`, and that is deliberate: a system that writes to real prospects
+    and places real calls must ship locked down, with autonomy granted explicitly. The opposite
+    — shipping autonomous and relying on the operator to restrict it — makes the prospect bear
+    the cost of a mistake.
     """
 
     DRY_RUN = "dry_run"
@@ -186,11 +191,11 @@ class AgentMode(StrEnum):
 
 @dataclass(frozen=True)
 class PolicySettings:
-    """Limites d'autonomie **appliquées par le code**.
+    """Autonomy limits **enforced by code**.
 
-    Le prompt décrit ces limites au modèle ; cette politique les impose. Un prompt est une
-    consigne, pas un contrôle d'accès : rien ne garantit qu'un modèle la respecte, et rien ne
-    doit dépendre de sa bonne volonté pour empêcher un email de partir.
+    The prompt describes these limits to the model; this policy enforces them. A prompt is an
+    instruction, not an access control: nothing guarantees a model will honour it, and nothing
+    should depend on its goodwill to stop an email from going out.
     """
 
     mode: AgentMode = AgentMode.SUPERVISED
@@ -248,6 +253,7 @@ class Settings:
             exa=ExaSettings(api_key=_env("EXA_API_KEY")),
             handoff=HandoffSettings(
                 teams_webhook_url=_env("TEAMS_WEBHOOK_URL"),
+                whatsapp_recipients=_env_list("HANDOFF_WHATSAPP_NUMBERS"),
                 hubspot_owner_id=_env("HUBSPOT_OWNER_ID"),
                 public_base_url=_env("PUBLIC_BASE_URL"),
                 approval_ui_token=_env("APPROVAL_UI_TOKEN"),
@@ -280,8 +286,8 @@ class Settings:
             raise ConfigurationError("SCAN_PAGE_SIZE doit être compris entre 1 et 200")
 
     def degraded_components(self) -> list[str]:
-        """Composants tournant en mode simulé faute de configuration — affiché au démarrage
-        pour qu'une démo ne se croie jamais branchée alors qu'elle ne l'est pas."""
+        """Components running in simulated mode for lack of configuration — displayed at
+        start-up so a demo never believes itself wired up when it is not."""
         degraded = []
         if not self.openrouter.enabled:
             degraded.append("LLM (agent scripté, aucune décision réelle)")
@@ -295,6 +301,10 @@ class Settings:
             degraded.append("voix (console)")
         if not self.exa.enabled:
             degraded.append("enrichissement web (désactivé)")
-        if not self.handoff.teams_enabled and not self.hubspot.enabled:
+        if (
+            not self.handoff.teams_enabled
+            and not self.hubspot.enabled
+            and not (self.handoff.whatsapp_enabled and self.whatsapp.enabled)
+        ):
             degraded.append("handoff (console — AUCUN humain n'est réellement prévenu)")
         return degraded

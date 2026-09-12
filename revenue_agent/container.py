@@ -1,10 +1,10 @@
-"""Composition root — le seul endroit du code où l'on choisit des implémentations concrètes.
+"""Composition root — the only place in the code where concrete implementations are chosen.
 
-Toute la dégradation gracieuse se décide ici : pas de HubSpot configuré, on branche le CRM
-JSON ; pas de Resend, l'email part en console. Le domaine et les use cases n'ont aucune
-connaissance de ces arbitrages — ils ne voient que des ports. C'est ce qui permet de passer
-d'une démo hors-ligne à une exécution réelle en changeant des variables d'environnement, sans
-toucher une ligne de logique métier.
+All graceful degradation is decided here: no HubSpot configured, we wire up the JSON CRM; no
+Resend, email goes to the console. The domain and the use cases know nothing of these
+arbitrations — they only ever see ports. That is what makes it possible to go from an offline
+demo to a real run by changing environment variables, without touching a line of business
+logic.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from revenue_agent.adapters.communication.meta_whatsapp import MetaWhatsAppAdapt
 from revenue_agent.adapters.communication.resend_email import ResendEmailAdapter
 from revenue_agent.adapters.communication.retell_voice import RetellVoiceAdapter
 from revenue_agent.adapters.communication.teams_handoff import TeamsHandoffAdapter
+from revenue_agent.adapters.communication.whatsapp_handoff import WhatsAppHandoffAdapter
 from revenue_agent.adapters.crm.hubspot import HubSpotCrmAdapter
 from revenue_agent.adapters.crm.json_file import JsonFileCrmAdapter
 from revenue_agent.adapters.intelligence.composite_reviewer import LayeredMessageReviewer
@@ -46,7 +47,7 @@ from revenue_agent.application.run_decision_cycle import RunDecisionCycle
 from revenue_agent.application.scan_for_leads import ScanForLeads
 from revenue_agent.config import Settings
 from revenue_agent.ports.approvals import ApprovalPort
-from revenue_agent.ports.communication import HandoffPort
+from revenue_agent.ports.communication import HandoffPort, WhatsAppPort
 from revenue_agent.ports.crm import CatalogPort, CrmPort
 from revenue_agent.ports.intelligence import DecisionAgentPort, MessageReviewPort
 from revenue_agent.ports.state import ScanStatePort
@@ -106,7 +107,7 @@ def build_container(settings: Settings | None = None) -> Container:
         if settings.retell.enabled
         else ConsoleVoiceAdapter()
     )
-    handoff = _build_handoff(settings)
+    handoff = _build_handoff(settings, whatsapp)
     enrichment = (
         ExaEnrichmentAdapter(settings.exa.api_key)
         if settings.exa.enabled
@@ -153,24 +154,38 @@ def build_container(settings: Settings | None = None) -> Container:
     )
 
 
-def _build_handoff(settings: Settings) -> HandoffPort:
-    """Destinations réelles du passage de relais.
+def _build_handoff(settings: Settings, whatsapp: WhatsAppPort) -> HandoffPort:
+    """Real destinations for the handoff.
 
-    La console reste en dernier recours, jamais comme destination unique : c'est le geste le
-    plus important du produit, il ne peut pas se terminer dans un flux que personne ne lit.
+    The console remains a last resort, never the sole destination: this is the most important
+    gesture in the product, it cannot end in a stream nobody reads.
+
+    The three destinations are complementary rather than redundant. The HubSpot task is durable
+    but passive — it waits for someone to open the CRM. Teams lands where the team works.
+    WhatsApp lands in a pocket, which for an approval that needs an answer within the hour is
+    often the only one that gets a reply.
     """
     destinations: list[HandoffPort] = []
 
     if settings.hubspot.enabled:
-        # Une tâche assignée sur le deal : durable, et là où le commercial travaille déjà.
         destinations.append(
             HubSpotHandoffAdapter(settings.hubspot.token, settings.handoff.hubspot_owner_id)
         )
     if settings.handoff.teams_enabled:
-        # Le ping immédiat, avec le lien d'arbitrage.
         destinations.append(
             TeamsHandoffAdapter(
                 settings.handoff.teams_webhook_url, settings.handoff.approval_url
+            )
+        )
+    if settings.handoff.whatsapp_enabled:
+        # Reuses the Meta connection already wired for prospects — only the recipient changes.
+        # Deliberately bypasses the outbound policy: a rate cap meant to stop us hounding a
+        # prospect must never stop us warning a colleague that an action is waiting.
+        destinations.append(
+            WhatsAppHandoffAdapter(
+                whatsapp,
+                settings.handoff.whatsapp_recipients,
+                settings.handoff.approval_url,
             )
         )
 
@@ -185,12 +200,12 @@ def _build_handoff(settings: Settings) -> HandoffPort:
 
 
 def _build_reviewer(settings: Settings) -> MessageReviewPort:
-    """Relecture en deux couches : le socle lexical toujours, le jugement sémantique si un
-    modèle est disponible.
+    """Two-layer review: the lexical baseline always, semantic judgement whenever a model is
+    available.
 
-    Le socle n'est jamais retiré. Un classifieur voit ce qu'un dictionnaire ne peut pas voir,
-    mais il est probabiliste et faillible : le remplacer par lui seul échangerait une garantie
-    contre une probabilité.
+    The baseline is never removed. A classifier sees what a dictionary cannot, but it is
+    probabilistic and fallible: replacing the baseline with it alone would trade a guarantee for
+    a probability.
     """
     lexical = LexicalMessageReviewer()
     if not settings.openrouter.enabled:
@@ -213,8 +228,8 @@ def _build_agent(
     if not settings.openrouter.enabled:
         return ScriptedDecisionAgent(crm)
 
-    # Import tardif : LangChain et LangGraph sont lourds à charger, inutile de les payer
-    # quand l'application tourne sans LLM (tests, démo hors-ligne).
+    # Late import: LangChain and LangGraph are heavy to load, and there is no point paying for
+    # that when the application runs without an LLM (tests, offline demo).
     from revenue_agent.adapters.intelligence.langgraph_agent import LangGraphDecisionAgent
 
     return LangGraphDecisionAgent(settings=settings, actions=actions)

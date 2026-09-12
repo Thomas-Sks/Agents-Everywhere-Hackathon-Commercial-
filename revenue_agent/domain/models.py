@@ -1,8 +1,8 @@
-"""Modèle de domaine — aucune dépendance à un framework, un SDK ou un transport.
+"""Domain model — no dependency on any framework, SDK or transport.
 
-C'est ici que vit la représentation d'une opportunité commerciale telle que le métier la
-comprend. Les adapters (HubSpot, JSON local...) traduisent vers ces types ; le moteur de
-décision ne connaît qu'eux.
+This is where the representation of a sales opportunity lives, as the business understands it.
+Adapters (HubSpot, local JSON...) translate into these types; the decision engine knows nothing
+else.
 """
 
 from __future__ import annotations
@@ -42,11 +42,11 @@ class Stakeholder:
 
 @dataclass(frozen=True, slots=True)
 class Objection:
-    """Une objection exprimée par le prospect.
+    """An objection raised by the prospect.
 
-    `id` est indispensable : une objection se lève au fil des échanges, et il faut pouvoir
-    désigner *laquelle* on clôt. Sans identifiant, la résolution ne peut s'appuyer que sur une
-    correspondance de texte, qui casse dès que la formulation varie.
+    `id` is essential: objections come up over the course of the conversation, and we need to be
+    able to designate *which one* we are closing. Without an identifier, resolution can only rely
+    on text matching, which breaks as soon as the wording varies.
     """
 
     text: str
@@ -75,10 +75,10 @@ class Product:
 
 @dataclass(frozen=True, slots=True)
 class ReachableChannels:
-    """Ce que l'agent peut réellement faire pour cette opportunité.
+    """What the agent can actually do for this opportunity.
 
-    Un agent ne peut pas choisir un canal dont il n'a pas la coordonnée : c'est la contrainte
-    qui relie « récupérer la data du CRM » à « envoyer un message ».
+    An agent cannot choose a channel it has no contact details for: this is the constraint that
+    links "fetch the data from the CRM" to "send a message".
     """
 
     email: str | None = None
@@ -112,11 +112,11 @@ class Opportunity:
     risk_notes: str = ""
     last_activity_at: datetime | None = None
     source: str = "local"
-    # Commercial responsable du dossier côté CRM — destinataire naturel d'un handoff.
+    # Sales rep who owns the deal on the CRM side — the natural recipient of a handoff.
     owner_id: str = ""
 
     def reachable_channels(self) -> ReachableChannels:
-        """Première coordonnée disponible, en privilégiant le champion puis le décideur."""
+        """First available contact details, favouring the champion, then the decision maker."""
         ordered = sorted(self.stakeholders, key=self._stakeholder_priority)
         email = next((s.email for s in ordered if s.email), None)
         phone = next((s.phone for s in ordered if s.phone), None)
@@ -142,10 +142,10 @@ class Opportunity:
 
 @dataclass(frozen=True, slots=True)
 class DealSnapshot:
-    """Vue légère renvoyée par le scan du CRM — assez pour trier, pas assez pour décider.
+    """Lightweight view returned by the CRM scan — enough to triage, not enough to decide.
 
-    Le triage travaille sur ces snapshots (aucun appel LLM, aucun appel réseau
-    supplémentaire) ; seules les opportunités retenues sont ensuite chargées en entier.
+    Triage works on these snapshots (no LLM call, no extra network call); only the opportunities
+    that pass are then loaded in full.
     """
 
     id: str
@@ -163,7 +163,7 @@ class Page:
 
 @dataclass(frozen=True, slots=True)
 class ProspectInsight:
-    """Résultat d'un enrichissement web (Exa) sur l'entreprise du prospect."""
+    """Result of a web enrichment lookup (Exa) on the prospect's company."""
 
     title: str
     url: str
@@ -173,7 +173,7 @@ class ProspectInsight:
 
 @dataclass(frozen=True, slots=True)
 class CallOutcome:
-    """Résultat d'un appel téléphonique, tel que remonté par la plateforme voix."""
+    """Outcome of a phone call, as reported by the voice platform."""
 
     opportunity_id: str
     transcript: str

@@ -1,11 +1,10 @@
-"""Agent de repli sans LLM — implémente `DecisionAgentPort`.
+"""Fallback agent with no LLM — implements `DecisionAgentPort`.
 
-Sélectionné quand aucune clé OpenRouter n'est configurée. Il ne décide rien : il consigne
-l'événement et le dit explicitement. C'est volontaire — un agent de repli qui simulerait des
-décisions plausibles serait bien pire qu'un agent qui annonce son incapacité, en démo comme en
-production.
+Selected when no OpenRouter key is configured. It decides nothing: it records the event and
+says so explicitly. That is deliberate — a fallback agent that faked plausible decisions would
+be far worse than one announcing its own incapacity, in a demo just as much as in production.
 
-Sert aussi de double de test pour exercer les use cases sans appeler de modèle.
+It also doubles as a test stub for exercising the use cases without calling a model.
 """
 
 from __future__ import annotations

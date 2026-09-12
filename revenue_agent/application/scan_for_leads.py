@@ -1,14 +1,14 @@
-"""Use case : scan périodique du CRM et détection des opportunités à traiter.
+"""Use case: periodic CRM scan and detection of the opportunities worth handling.
 
-Déclenché par Trigger.dev (cron) ou manuellement. Trois garde-fous structurent ce use case :
+Triggered by Trigger.dev (cron) or manually. Three guardrails give this use case its shape:
 
-1. **Fenêtre de recouvrement** — l'index de recherche HubSpot est *eventually consistent* ; on
-   relit systématiquement un peu avant le dernier pointeur et on déduplique par identifiant,
-   faute de quoi des leads passent entre les mailles.
-2. **Triage avant raisonnement** — le tri est déterministe et gratuit ; seules les
-   opportunités retenues consomment un cycle LLM.
-3. **Plafond par scan** — un pic d'activité dans le CRM ne doit pas se traduire par une
-   facture imprévisible. Le surplus est reporté au tick suivant, pas perdu.
+1. **Overlap window** — the HubSpot search index is *eventually consistent*; we systematically
+   read back a little before the last pointer and dedupe by identifier, otherwise leads slip
+   through the cracks.
+2. **Triage before reasoning** — the sort is deterministic and free; only the opportunities
+   that make the cut consume an LLM cycle.
+3. **Per-scan cap** — a spike of CRM activity must not turn into an unpredictable bill. The
+   overflow is deferred to the next tick, not lost.
 """
 
 from __future__ import annotations
@@ -27,10 +27,10 @@ from revenue_agent.ports.state import ScanStatePort
 
 logger = logging.getLogger(__name__)
 
-# Le tout premier scan est un **inventaire**, pas un delta : sans cela, une opportunité jamais
-# vue et non modifiée récemment resterait invisible pour toujours — or les deals dormants sont
-# précisément ceux qu'il faut réveiller. On remonte donc loin une seule fois, puis on ne traite
-# plus que les variations.
+# The very first scan is an **inventory**, not a delta: without it, an opportunity never seen
+# before and not recently modified would stay invisible forever — and dormant deals are
+# precisely the ones worth waking up. So we reach far back exactly once, then only ever process
+# the changes.
 BOOTSTRAP_HORIZON = timedelta(days=3650)
 MAX_PAGES = 20
 
@@ -115,8 +115,8 @@ class ScanForLeads:
 
         processed = tuple(filter(None, (self._process(trigger) for trigger in selected)))
 
-        # Le pointeur n'avance que si le CRM a répondu : sinon on rejouerait la fenêtre
-        # manquée comme si elle avait été traitée.
+        # The pointer only advances if the CRM answered: otherwise we would replay the missed
+        # window as though it had been processed.
         if crm_available:
             self._scan_state.set_pointer(now)
 
@@ -135,13 +135,13 @@ class ScanForLeads:
         return pointer - timedelta(minutes=self._settings.overlap_minutes)
 
     def _adopt_existing_book(self, snapshots: list[DealSnapshot]) -> None:
-        """Premier scan : on adopte le portefeuille existant sans le bombarder.
+        """First scan: adopt the existing book of business without carpet-bombing it.
 
-        Chaque deal est enregistré avec son stade actuel et, comme date de dernière action, sa
-        date de dernière modification. Conséquence voulue : un deal actif ne déclenche rien
-        (on ne relance pas 500 prospects le jour de l'installation), tandis qu'un deal dormant
-        depuis plus longtemps que le seuil d'inactivité est immédiatement éligible — c'est la
-        valeur qu'on apporte dès la première minute.
+        Every deal is recorded with its current stage and, as the date of last action, its date
+        of last modification. The intended consequence: an active deal triggers nothing (you do
+        not re-engage 500 prospects on installation day), while a deal dormant for longer than
+        the inactivity threshold is immediately eligible — that is the value delivered from the
+        very first minute.
         """
         for snapshot in snapshots:
             self._scan_state.upsert_known_state(
@@ -155,7 +155,7 @@ class ScanForLeads:
         logger.info("Premier scan : %s opportunité(s) adoptée(s) depuis le CRM", len(snapshots))
 
     def _collect_snapshots(self, since: datetime) -> tuple[list[DealSnapshot], bool]:
-        """Pagination complète, dédupliquée par identifiant."""
+        """Full pagination, deduplicated by identifier."""
         by_id: dict[str, DealSnapshot] = {}
         cursor: str | None = None
 

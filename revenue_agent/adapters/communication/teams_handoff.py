@@ -1,16 +1,15 @@
-"""Handoff vers Microsoft Teams — là où le commercial regarde vraiment.
+"""Handoff to Microsoft Teams — where the sales rep actually looks.
 
-Une tâche HubSpot est durable mais passive : elle attend qu'on ouvre le CRM. Le ping Teams est
-immédiat mais éphémère. Les deux sont complémentaires, d'où le composite qui les combine.
+A HubSpot task is durable but passive: it waits for someone to open the CRM. The Teams ping is
+immediate but ephemeral. The two are complementary, hence the composite that combines them.
 
-**Transport : webhook de workflow Power Automate.** Les connecteurs entrants historiques
-d'Office 365 sont en fin de vie ; la voie supportée est un workflow « When a Teams webhook
-request is received », qui fournit une URL acceptant une carte adaptative. Aucun
-enregistrement d'application ni consentement administrateur : une seule variable
-d'environnement, cohérent avec le reste des intégrations du projet.
+**Transport: a Power Automate workflow webhook.** The legacy Office 365 incoming connectors are
+being retired; the supported path is a "When a Teams webhook request is received" workflow,
+which provides a URL accepting an adaptive card. No app registration and no admin consent: a
+single environment variable, consistent with the rest of the project's integrations.
 
-Le message porte un **lien d'arbitrage** : recevoir l'information sans pouvoir agir ne servirait
-qu'à créer de la culpabilité.
+The message carries an **arbitration link**: receiving the information without being able to act
+on it would only create guilt.
 """
 
 from __future__ import annotations

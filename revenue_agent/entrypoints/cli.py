@@ -1,7 +1,7 @@
-"""Adapter primaire en ligne de commande.
+"""Primary command-line adapter.
 
-Sert à trois choses : lancer un scan à la main (sans attendre le cron), rejouer un événement
-sur une opportunité précise, et dérouler les scénarios de démonstration.
+Serves three purposes: running a scan by hand (without waiting for the cron), replaying an
+event on a specific opportunity, and walking through the demo scenarios.
 
     python -m revenue_agent.entrypoints.cli scan
     python -m revenue_agent.entrypoints.cli decide acme-co "Julie a répondu : c'est trop cher"

@@ -1,8 +1,8 @@
-"""Adapter CRM local sur fichier JSON — implémente `CrmPort` sans dépendance réseau.
+"""Local JSON-file CRM adapter — implements `CrmPort` with no network dependency.
 
-Deux usages : faire tourner la démo quand HubSpot n'est pas configuré, et exercer les use
-cases dans les tests. Même port, même contrat — c'est ce qui permet à la dégradation d'être un
-choix de câblage plutôt qu'une cascade de `if api_key is None` dans le code métier.
+Two uses: running the demo when HubSpot is not configured, and exercising the use cases in
+tests. Same port, same contract — which is what lets degradation be a wiring choice rather than
+a cascade of `if api_key is None` throughout the business code.
 """
 
 from __future__ import annotations
@@ -97,6 +97,41 @@ class JsonFileCrmAdapter:
                 )
             opportunity["last_activity_at"] = datetime.now(UTC).isoformat()
 
+    def update_stakeholder(
+        self,
+        opportunity_id: str,
+        *,
+        name: str,
+        stance: Stance,
+        role: str = "",
+        notes: str = "",
+    ) -> None:
+        with self._document.update() as data:
+            opportunity = self._ensure(data, opportunity_id)
+            stakeholders = opportunity.setdefault("stakeholders", [])
+
+            for entry in stakeholders:
+                if _same_person(entry.get("name", ""), name):
+                    entry["stance"] = stance.value
+                    # Only overwrite on new information: an update about the stance must not
+                    # silently erase a role or notes learned earlier.
+                    if role:
+                        entry["role"] = role
+                    if notes:
+                        entry["notes"] = notes
+                    return
+
+            stakeholders.append(
+                {
+                    "name": name,
+                    "role": role,
+                    "email": None,
+                    "phone": None,
+                    "stance": stance.value,
+                    "notes": notes,
+                }
+            )
+
     def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
         with self._document.update() as data:
             opportunity = data.get(OPPORTUNITIES_KEY, {}).get(opportunity_id)
@@ -116,8 +151,8 @@ class JsonFileCrmAdapter:
         for opportunity_id, raw in self._document.read().get(OPPORTUNITIES_KEY, {}).items():
             for stakeholder in raw.get("stakeholders", []):
                 candidate = _digits(stakeholder.get("phone") or "")
-                # Comparaison sur le numéro national complet : deux prospects distincts
-                # peuvent partager un suffixe, jamais le numéro entier.
+                # Compare on the full national number: two distinct prospects can share a
+                # suffix, never the whole number.
                 if candidate and _national(candidate) == _national(digits):
                     return opportunity_id
         return None
@@ -201,7 +236,7 @@ def _digits(value: str) -> str:
 
 
 def _national(digits: str) -> str:
-    """Ramène un numéro à sa forme nationale pour pouvoir comparer deux écritures."""
+    """Reduces a number to its national form so two spellings can be compared."""
     if digits.startswith("33") and len(digits) == 11:
         return digits[2:]
     if digits.startswith("0") and len(digits) == 10:
@@ -224,6 +259,11 @@ def _parse_channel(raw: str | None) -> Channel:
         return Channel(raw) if raw else Channel.SIGNAL
     except ValueError:
         return Channel.SIGNAL
+
+
+def _same_person(left: str, right: str) -> bool:
+    """Loose name matching — the model writes "julie martin" where the CRM has "Julie Martin"."""
+    return left.strip().casefold() == right.strip().casefold()
 
 
 def _parse_stance(raw: str | None) -> Stance:

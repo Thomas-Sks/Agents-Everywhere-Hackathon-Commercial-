@@ -1,8 +1,8 @@
-"""File d'attente de validation humaine.
+"""Human approval queue.
 
-Quand la politique exige un accord, l'action n'est pas exécutée : elle est mise en attente avec
-tout ce qu'il faut pour la rejouer telle quelle une fois validée. Le message rédigé par l'agent
-est conservé mot pour mot — un humain doit valider ce qui partira réellement, pas un résumé.
+When the policy requires sign-off, the action is not executed: it is held along with everything
+needed to replay it verbatim once approved. The message drafted by the agent is preserved word
+for word — a human must approve what will actually go out, not a summary of it.
 """
 
 from __future__ import annotations
@@ -41,8 +41,8 @@ class PendingApproval:
         return self.status is ApprovalStatus.PENDING
 
     def summary(self) -> str:
-        """Résumé lisible pour un humain qui arbitre — il doit pouvoir décider sans ouvrir
-        d'autre outil."""
+        """Readable summary for the human arbitrating — they must be able to decide without
+        opening any other tool."""
         preview = self.payload.get("body") or self.payload.get("message") or ""
         subject = self.payload.get("subject")
         lines = [

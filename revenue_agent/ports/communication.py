@@ -1,8 +1,8 @@
-"""Ports de communication — les moyens d'agir sur le monde extérieur.
+"""Communication ports — the means of acting on the outside world.
 
-Le moteur de décision choisit un canal ; il ignore que l'email part par Resend, que WhatsApp
-passe par Meta ou que l'appel est passé par Retell. Remplacer un fournisseur, c'est écrire un
-adapter, pas toucher au domaine.
+The decision engine picks a channel; it has no idea that email goes out through Resend, that
+WhatsApp goes through Meta or that the call is placed by Retell. Replacing a vendor means
+writing an adapter, not touching the domain.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from revenue_agent.domain.models import Opportunity
 
 class EmailPort(Protocol):
     def send(self, *, to: str, subject: str, body: str) -> str:
-        """Retourne un identifiant de message. Lève `MessagingError` en cas d'échec."""
+        """Returns a message identifier. Raises `MessagingError` on failure."""
         ...
 
 
@@ -26,37 +26,37 @@ class VoicePort(Protocol):
     def place_call(
         self, *, to_phone_number: str, opportunity: Opportunity, objective: str
     ) -> str:
-        """Déclenche un appel sortant et retourne son identifiant.
+        """Triggers an outbound call and returns its identifier.
 
-        L'implémentation est responsable de transmettre le contexte de l'opportunité à la
-        plateforme vocale, dans le format qu'elle impose.
+        The implementation is responsible for passing the opportunity's context to the voice
+        platform, in whatever format that platform imposes.
         """
         ...
 
 
 class HandoffPort(Protocol):
-    """Atteindre un humain au sujet d'une opportunité.
+    """Reaching a human about an opportunity.
 
-    Volontairement un port distinct des canaux prospect : ici le destinataire est un collègue,
-    pas un client, et l'exigence n'est pas la même. Un message au prospect qui échoue peut être
-    réessayé plus tard ; **un handoff perdu est un deal abandonné sans que personne ne le
-    sache**. Toute implémentation doit donc garantir la remise, ou échouer bruyamment.
+    Deliberately a separate port from the prospect-facing channels: here the recipient is a
+    colleague, not a customer, and the requirement is not the same. A message to a prospect that
+    fails can be retried later; **a lost handoff is a deal abandoned without anyone knowing**.
+    Every implementation must therefore guarantee delivery, or fail loudly.
 
-    Deux moments distincts, tous deux destinés à un humain :
+    Two distinct moments, both aimed at a human:
     """
 
     def escalate(
         self, *, opportunity: Opportunity, reason: str, urgency: str, context_brief: str
     ) -> None:
-        """Passage de relais complet : l'agent se retire, un commercial reprend le dossier."""
+        """Full handoff: the agent steps back, a sales rep takes over the deal."""
         ...
 
     def notify_pending_approval(
         self, *, opportunity: Opportunity, approval_id: str, channel: str, reason: str, preview: str
     ) -> None:
-        """Une action attend un arbitrage.
+        """An action is awaiting arbitration.
 
-        Sans cette notification, la file de validation ne serait consultée que par quelqu'un
-        qui pense à la consulter — et une action retenue resterait indéfiniment en attente.
+        Without this notification, the approval queue would only ever be consulted by someone
+        who thought to consult it — and a held action would stay pending indefinitely.
         """
         ...

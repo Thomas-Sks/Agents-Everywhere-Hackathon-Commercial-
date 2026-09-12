@@ -1,4 +1,4 @@
-"""Port de la file de validation humaine."""
+"""Port for the human approval queue."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ class ApprovalPort(Protocol):
     def mark(
         self, approval_id: str, status: ApprovalStatus, reviewer: str, note: str = ""
     ) -> PendingApproval | None:
-        """Enregistre l'arbitrage. Retourne None si l'identifiant est inconnu."""
+        """Records the arbitration. Returns None if the identifier is unknown."""
         ...
 
     def count_recent_outbound(self, opportunity_id: str, hours: int = 24) -> int:
-        """Actions sortantes réellement émises sur la période — alimente la règle de cadence."""
+        """Outbound actions actually sent over the period — feeds the rate-limit rule."""
         ...
 
     def record_sent(self, opportunity_id: str) -> None: ...

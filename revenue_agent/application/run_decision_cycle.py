@@ -1,8 +1,8 @@
-"""Use case : faire raisonner l'agent sur un événement et exécuter sa décision.
+"""Use case: have the agent reason about an event and carry out its decision.
 
-Point d'entrée unique de toute la logique commerciale. Qu'un événement vienne du scan du CRM,
-d'un message WhatsApp entrant ou de la fin d'un appel téléphonique, il finit ici — c'est ce qui
-garantit qu'un prospect ne « recommence pas son histoire » en changeant de canal.
+The single entry point for all sales logic. Whether an event comes from the CRM scan, an
+inbound WhatsApp message or the end of a phone call, it ends up here — which is what
+guarantees a prospect never has to "start their story over" just because the channel changed.
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ class RunDecisionCycle:
 
         summary = self._agent.decide(opportunity=opportunity, event=event, strategic=strategic)
 
-        # Le scan a réveillé cette opportunité : la relance programmée est consommée, et on
-        # mémorise le stade pour détecter le prochain changement.
+        # The scan has woken this opportunity up: the scheduled follow-up is consumed, and we
+        # record the stage so the next change can be detected.
         self._scan_state.clear_follow_up(opportunity_id)
         self._scan_state.upsert_known_state(
             opportunity_id,
@@ -75,12 +75,12 @@ class RunDecisionCycle:
     def execute_safely(
         self, opportunity_id: str, event: str, *, trigger_kind: TriggerKind | None = None
     ) -> DecisionResult | None:
-        """Variante tolérante utilisée par le scan : l'échec d'une opportunité ne doit pas
-        interrompre le traitement des suivantes."""
+        """Tolerant variant used by the scan: one opportunity failing must never interrupt the
+        processing of the ones that follow."""
         try:
             return self.execute(opportunity_id, event, trigger_kind=trigger_kind)
         except OpportunityNotFound:
             logger.warning("Opportunité %s introuvable — ignorée", opportunity_id)
-        except Exception:  # noqa: BLE001 - une boucle autonome ne doit jamais s'arrêter
+        except Exception:  # noqa: BLE001 - an autonomous loop must never come to a halt
             logger.exception("Cycle de décision en échec pour l'opportunité %s", opportunity_id)
         return None

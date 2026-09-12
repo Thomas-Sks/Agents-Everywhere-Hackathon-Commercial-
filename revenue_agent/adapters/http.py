@@ -1,9 +1,8 @@
-"""Client HTTP partagé par les adapters sortants.
+"""HTTP client shared by all outbound adapters.
 
-Centralise ce qu'on ne veut pas réécrire (ni oublier) dans chaque intégration : timeout
-explicite, retry avec backoff sur les erreurs transitoires uniquement, et traduction des
-échecs en erreurs applicatives typées. Un 4xx métier ne doit pas être retenté ; un 429 ou un
-502, si.
+Centralises what we don't want to rewrite (or forget) in every integration: an explicit
+timeout, retry with backoff on transient errors only, and translation of failures into typed
+application errors. A business-level 4xx must not be retried; a 429 or a 502 must be.
 """
 
 from __future__ import annotations

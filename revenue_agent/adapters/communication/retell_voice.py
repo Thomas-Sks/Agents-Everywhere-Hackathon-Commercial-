@@ -1,13 +1,12 @@
-"""Adapter voix — Retell AI (appels téléphoniques sortants).
+"""Voice adapter — Retell AI (outbound phone calls).
 
-Contrainte vérifiée de l'API : `retell_llm_dynamic_variables` n'accepte que des **chaînes de
-caractères**. Tout le contexte de l'opportunité doit donc être aplati avant l'envoi — d'où
-`_dynamic_variables`, qui sérialise explicitement plutôt que de laisser un dict imbriqué
-échouer côté Retell.
+Verified API constraint: `retell_llm_dynamic_variables` only accepts **strings**. The whole
+opportunity context must therefore be flattened before sending — hence `_dynamic_variables`,
+which serialises explicitly rather than letting a nested dict fail on the Retell side.
 
-Côté modèle : GPT-5.6 n'apparaît pas dans les LLM proposés nativement par Retell. L'agent
-vocal tourne donc sur leur modèle, et notre moteur de décision (GPT-5.6) garde la stratégie
-avant et après l'appel, ainsi que l'exécution des tools pendant l'appel via webhook.
+On the model side: GPT-5.6 does not appear among the LLMs Retell offers natively. The voice
+agent therefore runs on their model, while our decision engine (GPT-5.6) keeps the strategy
+before and after the call, as well as tool execution during the call via webhook.
 """
 
 from __future__ import annotations
@@ -44,8 +43,8 @@ class RetellVoiceAdapter:
                 "to_number": to_phone_number,
                 "override_agent_id": self._agent_id,
                 "retell_llm_dynamic_variables": _dynamic_variables(opportunity, objective),
-                # Permet de retrouver l'opportunité au webhook `call_analyzed`, sans avoir à
-                # deviner à partir du numéro de téléphone.
+                # Lets us find the opportunity again at the `call_analyzed` webhook, without
+                # having to guess it from the phone number.
                 "metadata": {"opportunity_id": opportunity.id},
             },
         )
@@ -60,7 +59,7 @@ class RetellVoiceAdapter:
 
 
 def _dynamic_variables(opportunity: Opportunity, objective: str) -> dict[str, str]:
-    """Aplatit le contexte en chaînes — seul format accepté par Retell."""
+    """Flattens the context into strings — the only format Retell accepts."""
     contact = next(iter(opportunity.stakeholders), None)
     objections = " ; ".join(
         f"{objection.text} (cause probable : {objection.root_cause})"
@@ -90,10 +89,10 @@ def _truncate(value: str) -> str:
 
 
 def verify_signature(*, payload: bytes, signature: str | None, secret: str) -> bool:
-    """Vérifie la signature HMAC-SHA256 d'un webhook Retell (`X-Retell-Signature`).
+    """Verifies the HMAC-SHA256 signature of a Retell webhook (`X-Retell-Signature`).
 
-    Comparaison en temps constant, sur le corps brut de la requête : re-sérialiser le JSON
-    avant de signer invaliderait la comparaison au moindre écart d'espacement.
+    Constant-time comparison, over the raw request body: re-serialising the JSON before signing
+    would invalidate the comparison at the slightest whitespace difference.
     """
     if not secret:
         raise VoiceError("retell", "secret de webhook non configuré")

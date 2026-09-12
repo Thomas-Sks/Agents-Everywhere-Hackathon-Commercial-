@@ -1,15 +1,15 @@
-"""Adapter primaire HTTP — expose les use cases au monde extérieur.
+"""Primary HTTP adapter — exposes the use cases to the outside world.
 
-Trois familles d'appelants :
+Three families of callers:
 
-* **Trigger.dev** appelle `POST /scan` sur une cadence cron. C'est le battement de cœur qui
-  rend l'agent autonome.
-* **Retell** appelle `POST /retell/tool-call` pendant un appel (l'agent vocal exécute une
-  action) et `POST /retell/webhook` à la fin (`call_analyzed` porte le résumé et le sentiment).
-* **Meta** appelle `POST /whatsapp/inbound` quand le prospect répond.
+* **Trigger.dev** calls `POST /scan` on a cron cadence. That is the heartbeat which makes the
+  agent autonomous.
+* **Retell** calls `POST /retell/tool-call` during a call (the voice agent executing an action)
+  and `POST /retell/webhook` at the end (`call_analyzed` carries the summary and the sentiment).
+* **Meta** calls `POST /whatsapp/inbound` when the prospect replies.
 
-Aucune logique métier ici : validation, authentification, traduction du transport vers les use
-cases, et retour. C'est la définition même d'un adapter.
+No business logic here: validation, authentication, translation from the transport into the use
+cases, and back. That is the very definition of an adapter.
 """
 
 from __future__ import annotations
@@ -50,12 +50,12 @@ app = FastAPI(title="Autonomous Revenue Agent", version="1.0.0", lifespan=lifesp
 
 
 def container() -> Container:
-    if _container is None:  # pragma: no cover - garde-fou de démarrage
+    if _container is None:  # pragma: no cover - startup guardrail
         raise RuntimeError("Container non initialisé")
     return _container
 
 
-# -- Santé -------------------------------------------------------------------------
+# -- Health ------------------------------------------------------------------------
 
 
 @app.get("/health")
@@ -72,17 +72,16 @@ async def health() -> dict:
     }
 
 
-# -- Validation humaine ------------------------------------------------------------
+# -- Human approval ----------------------------------------------------------------
 
 
 def _approval_access_ok(current: Container, token: str | None) -> bool:
-    """Les routes d'arbitrage déclenchent de vrais envois : elles ne peuvent pas rester
-    ouvertes sur une URL publique.
+    """The arbitration routes trigger real sends: they cannot be left open on a public URL.
 
-    Le jeton circule en paramètre d'URL pour qu'un lien reçu dans Teams soit cliquable depuis
-    un téléphone. C'est un compromis assumé — un jeton dans une URL se retrouve dans les
-    journaux de serveur — acceptable pour un outil interne à courte durée de vie, à remplacer
-    par une vraie authentification si l'outil se pérennise.
+    The token travels as a URL parameter so that a link received in Teams is clickable from a
+    phone. This is a deliberate trade-off — a token in a URL ends up in server logs —
+    acceptable for a short-lived internal tool, to be replaced by real authentication if the
+    tool becomes permanent.
     """
     expected = current.settings.handoff.approval_ui_token
     if not expected:
@@ -93,9 +92,9 @@ def _approval_access_ok(current: Container, token: str | None) -> bool:
 
 @app.get("/approvals")
 async def list_approvals(token: str | None = None) -> JSONResponse:
-    """Actions retenues par la politique, en attente d'arbitrage humain.
+    """Actions held by the policy, awaiting human arbitration.
 
-    Tant qu'une action figure ici, rien n'est parti chez le prospect.
+    As long as an action appears here, nothing has reached the prospect.
     """
     current = container()
     if not _approval_access_ok(current, token):
@@ -121,10 +120,10 @@ async def list_approvals(token: str | None = None) -> JSONResponse:
 
 @app.get("/approvals/ui", response_class=HTMLResponse)
 async def approvals_ui(token: str | None = None) -> Response:
-    """Page d'arbitrage : le message exact qui partira, et deux boutons.
+    """Arbitration page: the exact message that will go out, and two buttons.
 
-    C'est ce qui sort la validation du terminal — le destinataire d'une notification Teams
-    ouvre ce lien sur son téléphone et tranche en deux secondes.
+    This is what takes approval out of the terminal — the recipient of a Teams notification
+    opens this link on their phone and decides in two seconds.
     """
     current = container()
     if not _approval_access_ok(current, token):
@@ -163,13 +162,13 @@ async def reject(approval_id: str, request: Request, token: str | None = None) -
     return JSONResponse({"resultat": result})
 
 
-# -- Scan périodique ---------------------------------------------------------------
+# -- Periodic scan -----------------------------------------------------------------
 
 
 @app.post("/scan")
 async def scan(x_scan_token: str | None = Header(default=None)) -> JSONResponse:
-    """Déclenché par Trigger.dev. Protégé par un secret partagé : cet endpoint consomme des
-    tokens LLM, il ne doit pas être ouvert sur l'internet public."""
+    """Triggered by Trigger.dev. Protected by a shared secret: this endpoint consumes LLM
+    tokens, it must not be left open to the public internet."""
     current = container()
     expected = current.settings.scan.shared_secret
 
@@ -195,10 +194,10 @@ async def scan(x_scan_token: str | None = Header(default=None)) -> JSONResponse:
 async def retell_tool_call(
     request: Request, x_retell_signature: str | None = Header(default=None)
 ) -> JSONResponse:
-    """Exécute une action demandée par l'agent vocal pendant un appel.
+    """Executes an action requested by the voice agent during a call.
 
-    Format vérifié de Retell : `{name, args, call}`. La réponse JSON `{result}` permet à Retell
-    d'en faire une « response variable » exploitable dans la suite de la conversation.
+    Retell's verified format: `{name, args, call}`. The JSON response `{result}` lets Retell
+    turn it into a "response variable" usable later in the conversation.
     """
     current = container()
     raw_body = await request.body()
@@ -230,8 +229,8 @@ async def retell_webhook(
     background_tasks: BackgroundTasks,
     x_retell_signature: str | None = Header(default=None),
 ) -> JSONResponse:
-    """Événements d'appel. Seul `call_analyzed` porte le résumé et le sentiment — c'est donc
-    celui-là qui alimente le moteur de décision, pas `call_ended`."""
+    """Call events. Only `call_analyzed` carries the summary and the sentiment — so that is
+    the one feeding the decision engine, not `call_ended`."""
     current = container()
     raw_body = await request.body()
 
@@ -259,8 +258,8 @@ async def retell_webhook(
         successful=bool(analysis.get("call_successful", True)),
     )
 
-    # Traitement en tâche de fond : le cycle de décision peut durer plusieurs secondes, et
-    # Retell attend un accusé de réception rapide.
+    # Background processing: the decision cycle can take several seconds, and Retell
+    # expects a fast acknowledgement.
     background_tasks.add_task(current.handle_call_outcome.execute, outcome)
     return JSONResponse({"status": "accepté", "opportunite": opportunity_id})
 
@@ -270,7 +269,7 @@ async def retell_webhook(
 
 @app.get("/whatsapp/inbound")
 async def whatsapp_verify(request: Request) -> Response:
-    """Handshake de vérification exigé par Meta à la configuration du webhook."""
+    """Verification handshake required by Meta when configuring the webhook."""
     params = request.query_params
     expected = container().settings.whatsapp.verify_token
     provided = params.get("hub.verify_token")
@@ -282,7 +281,7 @@ async def whatsapp_verify(request: Request) -> Response:
 
 @app.post("/whatsapp/inbound")
 async def whatsapp_inbound(request: Request, background_tasks: BackgroundTasks) -> JSONResponse:
-    """Un message entrant relance un cycle de décision complet."""
+    """An inbound message kicks off a full decision cycle."""
     current = container()
     payload = _safe_json(await request.body())
 
@@ -323,6 +322,13 @@ _RETELL_ACTIONS: dict[str, Any] = {
         objection=a.get("objection", ""),
         objection_root_cause=a.get("objection_root_cause", ""),
         next_steps=a.get("next_steps", ""),
+    ),
+    "update_stakeholder": lambda c, a: c.actions.update_stakeholder(
+        a["opportunity_id"],
+        a["name"],
+        a["stance"],
+        a.get("role", ""),
+        a.get("notes", ""),
     ),
     "resolve_objection": lambda c, a: c.actions.resolve_objection(
         a["opportunity_id"], a["objection_id"], a.get("resolution", "")
@@ -371,11 +377,11 @@ def _extract_whatsapp_message(payload: dict) -> tuple[str, str] | None:
 
 
 def _resolve_opportunity_by_phone(current: Container, phone: str) -> str | None:
-    """Délègue la résolution au CRM, qui dispose d'un index sur les numéros.
+    """Delegates resolution to the CRM, which has an index on phone numbers.
 
-    La version précédente chargeait jusqu'à cent opportunités — une requête chacune — à chaque
-    message entrant, ne lisait que la première page, et rapprochait sur les neuf derniers
-    chiffres : lent, dévoreur de quota, et capable d'attribuer un message au mauvais prospect.
+    The previous version loaded up to a hundred opportunities — one request each — on every
+    inbound message, only read the first page, and matched on the last nine digits: slow, a
+    quota hog, and capable of attributing a message to the wrong prospect.
     """
     try:
         return current.crm.find_opportunity_by_phone(phone)

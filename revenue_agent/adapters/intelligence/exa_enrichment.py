@@ -1,11 +1,11 @@
-"""Adapter d'enrichissement — Exa.
+"""Enrichment adapter — Exa.
 
-Répond au « qu'est-ce que je ne sais pas ? » du moteur de décision : le CRM dit ce qui s'est
-passé entre nous et le prospect, Exa dit ce qui s'est passé chez le prospect. Une levée de
-fonds ou un recrutement massif change l'interprétation d'un silence de deux mois.
+Answers the decision engine's "what don't I know?": the CRM tells us what happened between us
+and the prospect, Exa tells us what happened at the prospect. A funding round or a hiring spree
+changes how two months of silence should be read.
 
-La fenêtre temporelle est essentielle : sans `startPublishedDate`, on remonte des articles de
-2019 qui ne sont pas des signaux d'achat.
+The time window is essential: without `startPublishedDate`, we surface articles from 2019 that
+are not buying signals.
 """
 
 from __future__ import annotations
@@ -74,8 +74,8 @@ class ExaEnrichmentAdapter:
 
 
 class NullEnrichmentAdapter:
-    """Utilisé quand Exa n'est pas configuré : l'agent sait alors qu'il n'a pas cette capacité,
-    plutôt que de recevoir des résultats vides qu'il pourrait prendre pour « rien à signaler »."""
+    """Used when Exa is not configured: the agent then knows it lacks the capability, rather
+    than receiving empty results it might read as "nothing to report"."""
 
     def research_company(
         self, company_name: str, *, since_days: int = 90, limit: int = 5

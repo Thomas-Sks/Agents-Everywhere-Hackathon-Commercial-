@@ -1,11 +1,11 @@
-"""Use case : exploiter la fin d'un appel téléphonique.
+"""Use case: make use of the end of a phone call.
 
-C'est le maillon qui ferme la boucle vocale. Sans lui, un appel est un événement orphelin :
-l'agent aurait parlé au prospect sans que rien de ce qui s'y est dit ne remonte dans le CRM ni
-n'influence la décision suivante.
+This is the link that closes the voice loop. Without it, a call is an orphan event: the agent
+would have spoken to the prospect without anything that was said making its way back into the
+CRM or influencing the next decision.
 
-Côté Retell, c'est l'événement `call_analyzed` — et non `call_ended` — qui porte le résumé et
-le sentiment ; c'est donc celui-là qu'il faut écouter.
+On the Retell side it is the `call_analyzed` event — not `call_ended` — that carries the
+summary and the sentiment; that is therefore the one to listen for.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ class HandleCallOutcome:
         self._decision_cycle = decision_cycle
 
     def execute(self, outcome: CallOutcome) -> DecisionResult | None:
-        # L'écriture CRM passe en premier : même si le cycle de décision échoue derrière, la
-        # trace de l'appel ne doit pas être perdue.
+        # The CRM write comes first: even if the decision cycle fails afterwards, the record of
+        # the call must not be lost.
         try:
             self._crm.log_call(outcome.opportunity_id, outcome)
         except CrmError:

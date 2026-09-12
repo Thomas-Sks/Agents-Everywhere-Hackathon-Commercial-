@@ -1,8 +1,8 @@
-"""Configuration du logging applicatif.
+"""Application logging configuration.
 
-Format lisible en console pour la démo, et bascule JSON pour un déploiement où les logs sont
-agrégés (Trigger.dev, conteneur). Les logs sont le seul canal d'observabilité du produit :
-quand l'agent tourne en autonomie, personne ne regarde l'écran au moment où il décide.
+A console-readable format for demos, switching to JSON for deployments where logs are
+aggregated (Trigger.dev, a container). Logs are the product's only observability channel: when
+the agent runs autonomously, nobody is watching the screen at the moment it decides.
 """
 
 from __future__ import annotations

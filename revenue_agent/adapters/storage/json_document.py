@@ -1,11 +1,11 @@
-"""Persistance JSON sur fichier — support des adapters locaux.
+"""JSON file persistence — backing store for the local adapters.
 
-Écriture atomique (fichier temporaire puis `os.replace`) et verrou process : une interruption
-au mauvais moment ne doit pas laisser un état tronqué, et deux requêtes FastAPI concurrentes ne
-doivent pas s'écraser mutuellement.
+Atomic write (temporary file then `os.replace`) and a process-level lock: an interruption at
+the wrong moment must not leave truncated state, and two concurrent FastAPI requests must not
+overwrite each other.
 
-Suffisant pour un déploiement mono-instance. Au-delà, remplacer par un adapter Postgres —
-c'est précisément ce que l'architecture en ports rend possible sans toucher au domaine.
+Good enough for a single-instance deployment. Beyond that, replace it with a Postgres adapter —
+which is precisely what the ports architecture makes possible without touching the domain.
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ class JsonDocument:
     def write(self, data: dict[str, Any]) -> None:
         with self._lock:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            # delete=False est indispensable : le fichier doit survivre à la fermeture pour
-            # être renommé atomiquement sur la cible. Le nettoyage est assuré par le `except`.
+            # delete=False is essential: the file must survive being closed so it can be
+            # atomically renamed onto the target. Cleanup is handled by the `except` block.
             handle = tempfile.NamedTemporaryFile(  # noqa: SIM115
                 "w",
                 encoding="utf-8",
@@ -61,7 +61,7 @@ class JsonDocument:
 
     @contextmanager
     def update(self) -> Iterator[dict[str, Any]]:
-        """Lecture-modification-écriture sous verrou."""
+        """Read-modify-write under lock."""
         with self._lock:
             data = self.read()
             yield data

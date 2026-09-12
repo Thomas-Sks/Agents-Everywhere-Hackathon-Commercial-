@@ -1,241 +1,242 @@
 # Architecture
 
-## La thèse
+## The thesis
 
-Le produit n'est ni un générateur d'emails, ni un voicebot : c'est un **moteur de décision
-commerciale**. Email, WhatsApp et téléphone ne sont que des façons d'exécuter une décision. Le
-code est organisé pour que cette phrase soit vraie techniquement, pas seulement dans le pitch :
-la logique commerciale ne connaît aucun fournisseur.
+This product is neither an email generator nor a voicebot: it is a **sales decision engine**.
+Email, WhatsApp and phone are merely ways of executing a decision. The code is organised so
+that this claim holds technically, not just in the pitch: the sales logic knows nothing about
+any vendor.
 
-## Hexagonale, et pourquoi ça compte ici
+## Hexagonal, and why it matters here
 
 ```
-        entrypoints (FastAPI, CLI)          ← adapters primaires
+        entrypoints (FastAPI, CLI)          ← primary adapters
                     │
               application                    ← use cases
                     │
-                 domain                      ← modèle, triage, enjeu, politique (zéro dépendance)
+                 domain                      ← model, triage, stakes, policy (zero dependencies)
                     │
                   ports                      ← interfaces
                     │
-   HubSpot · Resend · Meta · Retell · Exa · OpenRouter · JSON local
-                                             ← adapters secondaires
+   HubSpot · Resend · Meta · Retell · Exa · OpenRouter · local JSON
+                                             ← secondary adapters
 ```
 
-Trois bénéfices concrets, pas théoriques :
+Three concrete benefits, not theoretical ones:
 
-**La dégradation devient une décision de câblage.** Avant, « ça doit marcher sans clé API » se
-traduisait par des `if not api_key: print(...)` dispersés dans chaque fonction. Désormais le
-composition root (`container.py`) choisit `HubSpotCrmAdapter` ou `JsonFileCrmAdapter`,
-`ResendEmailAdapter` ou `ConsoleEmailAdapter`. Le domaine ignore l'arbitrage, et le chemin de
-code exercé en démo est le même qu'en production.
+**Degradation becomes a wiring decision.** Previously, "it has to work without an API key"
+translated into `if not api_key: print(...)` scattered across every function. Now the
+composition root (`container.py`) picks either `HubSpotCrmAdapter` or `JsonFileCrmAdapter`,
+either `ResendEmailAdapter` or `ConsoleEmailAdapter`. The domain is unaware of the arbitration,
+and the code path exercised in a demo is the same one that runs in production.
 
-**Les tests tournent sans réseau.** 75 tests couvrent le triage, le routage par enjeu, la
-résolution de canal, la boucle de scan, la politique d'autonomie et la relecture des messages —
-en moins d'une seconde, sans HubSpot, sans LLM. C'est la mesure objective que la logique métier
-est bien découplée.
+**Tests run without a network.** 102 tests cover triage, stakes-based routing, channel
+resolution, the scan loop, the autonomy policy and message review — in under a second, without
+HubSpot, without an LLM. That is the objective measure that the business logic really is
+decoupled.
 
-**Changer de fournisseur est un fichier.** Passer de HubSpot à Salesforce, de Retell à Vapi,
-d'OpenRouter à l'API OpenAI directe : un adapter, aucun impact sur le domaine.
+**Switching vendors is one file.** Moving from HubSpot to Salesforce, from Retell to Vapi, from
+OpenRouter to the OpenAI API directly: one adapter, zero impact on the domain.
 
-## La boucle autonome
+## The autonomous loop
 
 ```
 Trigger.dev (cron 5 min) ──> POST /scan
-   1. HubSpot search : deals modifiés depuis (pointeur − 5 min de recouvrement)
-   2. déduplication par id        ← l'index de recherche HubSpot est eventually consistent
-   3. triage déterministe, zéro LLM :
-        nouveau lead · changement de stade · relance échue · inactivité prolongée
-   4. plafond par scan            ← un pic d'activité CRM ne doit pas faire exploser la facture
-   5. cycle de décision sur les opportunités retenues
+   1. HubSpot search: deals modified since (pointer − 5 min overlap)
+   2. dedupe by id               ← the HubSpot search index is eventually consistent
+   3. deterministic triage, zero LLM:
+        new lead · stage change · follow-up due · prolonged inactivity
+   4. per-scan cap               ← a spike of CRM activity must not blow up the bill
+   5. decision cycle on the selected opportunities
 ```
 
-Quatre décisions de conception méritent d'être explicitées :
+Four design decisions deserve to be spelled out:
 
-**Le premier scan est un inventaire, pas un delta.** Sans cela, une opportunité jamais vue et
-non modifiée récemment resterait invisible pour toujours — or les deals dormants sont
-précisément ceux qui valent de l'argent. Au premier passage, l'agent adopte le portefeuille
-existant : un deal actif ne déclenche rien (on ne relance pas 500 prospects le jour de
-l'installation), un deal dormant au-delà du seuil est immédiatement éligible.
+**The first scan is an inventory, not a delta.** Without that, an opportunity never seen before
+and not recently modified would stay invisible forever — and dormant deals are precisely the
+ones worth money. On the first pass, the agent adopts the existing book of business: an active
+deal triggers nothing (you do not re-engage 500 prospects on installation day), while a deal
+dormant beyond the threshold is immediately eligible.
 
-**Le pointeur n'avance que si le CRM a répondu.** Sinon une panne HubSpot ferait passer une
-fenêtre entière pour traitée, et les leads de cette fenêtre seraient perdus silencieusement.
+**The pointer only advances if the CRM answered.** Otherwise a HubSpot outage would make an
+entire window look processed, and the leads in that window would be silently lost.
 
-**Le triage précède le raisonnement.** Un scan peut remonter des centaines de deals ; faire
-raisonner un modèle sur chacun coûterait cher pour conclure, la plupart du temps, qu'il n'y a
-rien à faire. Le triage est une fonction pure et gratuite.
+**Triage comes before reasoning.** A scan can surface hundreds of deals; having a model reason
+over each one would cost a fortune to conclude, most of the time, that there is nothing to do.
+Triage is a pure, free function.
 
-**Le polling n'est pas un choix.** Les webhooks HubSpot exigent une application publique et ne
-sont pas disponibles sur un compte développeur gratuit. La cadence de 5 minutes est dictée par
-la Search API, plafonnée à 4 requêtes/seconde partagées.
+**Polling is not a choice.** HubSpot webhooks require a public app and are not available on a
+free developer account. The 5-minute cadence is dictated by the Search API, capped at 4
+requests/second shared across objects.
 
-## Le routage par enjeu
+## Stakes-based routing
 
-Si la décision commerciale est le produit, alors *combien de raisonnement cette décision
-mérite* est elle-même une décision. `domain/stakes.py` tranche, en fonction pure et auditable :
+If the sales decision is the product, then *how much reasoning that decision deserves* is
+itself a decision. `domain/stakes.py` settles it, as a pure and auditable function:
 
-| Situation | Modèle |
+| Situation | Model |
 |---|---|
-| Montant ≥ 50 k€, stade tardif, objection non résolue, changement de stade | `openai/gpt-5.6-sol` |
-| Le reste | `openai/gpt-5.6-luna` |
+| Amount ≥ €50k, late stage, unresolved objection, stage change | `openai/gpt-5.6-sol` |
+| Everything else | `openai/gpt-5.6-luna` |
 
-Les trois identifiants ont été vérifiés contre le catalogue public d'OpenRouter, pas seulement
-lus dans une documentation.
+All three identifiers were verified against OpenRouter's public catalogue, not merely read in
+some documentation.
 
-Chaque cycle journalise son motif de routage — le coût reste explicable après coup. Les
-fallbacks entre modèles sont natifs côté OpenRouter (champ `models[]`), donc pas de retry à
-écrire.
+Every cycle logs its routing rationale — the cost stays explainable after the fact. Fallbacks
+between models are native on the OpenRouter side (the `models[]` field), so there is no retry
+logic to write.
 
-## Le contrôle de l'opérateur
+## Operator control
 
-Le prompt décrit au modèle ce qu'il a le droit de faire. Cela ne suffit pas : un prompt est une
-consigne, pas un contrôle d'accès, et `escalate_to_human` est une action que le modèle *choisit*
-d'appeler — la limite d'autonomie n'existerait donc que tant qu'il veut bien la respecter.
+The prompt tells the model what it is allowed to do. That is not enough: a prompt is an
+instruction, not an access control, and `escalate_to_human` is an action the model *chooses* to
+call — so the autonomy limit would only exist for as long as the model felt like honouring it.
 
-`domain/policy.py` impose ces limites en code. Chaque action sortante est évaluée **avant**
-exécution, dans `ActionRegistry._guard` :
+`domain/policy.py` enforces those limits in code. Every outbound action is evaluated **before**
+execution, inside `ActionRegistry._guard`:
 
-| Règle | Verdict | Ce qu'elle empêche |
+| Rule | Verdict | What it prevents |
 |---|---|---|
-| `mode_dry_run` | bloqué | Toute émission, en répétition ou en test |
-| `destinataire_hors_liste` | bloqué | Écrire à un vrai prospect pendant une démo |
-| `prix_hors_catalogue` | bloqué | Qu'un prix halluciné engage l'entreprise |
-| `cadence_maximale` | bloqué | Le harcèlement d'un prospect |
-| `mode_supervise` | validation | Toute action, tant que l'autonomie n'est pas accordée |
-| `relecture_*` | validation | Ce qu'un directeur commercial ne laisserait pas partir |
-| `montant_eleve` | validation | Qu'un gros deal se joue sans supervision |
+| `mode_dry_run` | blocked | Any send at all, in rehearsal or under test |
+| `destinataire_hors_liste` | blocked | Writing to a real prospect during a demo |
+| `prix_hors_catalogue` | blocked | A hallucinated price committing the company |
+| `cadence_maximale` | blocked | Harassing a prospect |
+| `mode_supervise` | approval | Any action, as long as autonomy has not been granted |
+| `relecture_*` | approval | Anything a sales director would not let out the door |
+| `montant_eleve` | approval | A large deal being played out without supervision |
 
-Trois propriétés y sont délibérées :
+Three properties here are deliberate:
 
-**Le mode par défaut est `supervised`.** Le système est verrouillé à l'installation et
-l'autonomie s'accorde explicitement. L'inverse ferait porter le coût de l'erreur au prospect.
+**The default mode is `supervised`.** The system ships locked down and autonomy is granted
+explicitly. The opposite would make the prospect bear the cost of a mistake.
 
-**Un refus est rendu au modèle sous forme de message, pas d'exception.** L'agent peut alors
-s'adapter — réécrire, changer de canal, escalader. Le prompt lui interdit en revanche
-explicitement de reformuler pour contourner le filtre : retirer le mot « remise » en proposant
-la même concession serait une faute grave.
+**A refusal is returned to the model as a message, not an exception.** The agent can then adapt
+— rewrite, switch channel, escalate. The prompt does, however, explicitly forbid it from
+rephrasing to slip past the filter: dropping the word "discount" while offering the same
+concession would be a serious offence.
 
-**Une validation humaine lève les règles de validation, jamais les blocages.** Un opérateur
-arbitre le commercial ; il ne contourne pas le mode simulation ni la liste de destinataires
-autorisés, qui sont des garde-fous d'exploitation.
+**A human approval lifts the approval rules, never the blocks.** An operator arbitrates the
+sales call; they do not bypass simulated mode or the allow-list of recipients, which are
+operational guardrails.
 
-L'arbitrage se fait sans interface, par CLI ou API : `approvals list` montre le message exact
-qui partira, `approve` l'envoie tel quel, `reject` le classe en laissant une trace dans le CRM.
-Tant qu'une action figure dans cette file, **rien n'est parti chez le prospect**.
+Arbitration happens without a UI, via CLI or API: `approvals list` shows the exact message that
+will go out, `approve` sends it as-is, `reject` files it away while leaving a trace in the CRM.
+As long as an action sits in that queue, **nothing has reached the prospect**.
 
-### La relecture, en deux couches
+### Review, in two layers
 
-La détection par mots-clés attrape ce qui se nomme (« remise », « -20 % »). Elle ne voit pas ce
-qui se formule : « je m'aligne sur leur tarif », « vous rentabiliserez en six mois, c'est
-garanti », « l'offre expire ce soir ». Ces phrases engagent l'entreprise ou abîment la relation
-sans contenir aucun mot du dictionnaire.
+Keyword detection catches what names itself ("discount", "-20%"). It does not see what merely
+phrases itself: "I'll match their price", "you'll break even in six months, guaranteed", "the
+offer expires tonight". Those sentences commit the company or damage the relationship without
+containing a single dictionary word.
 
-D'où une seconde couche : un modèle relit le message comme le ferait un directeur commercial
-avant envoi, avec le contexte de l'opportunité — stade, montant, objections ouvertes, nombre
-d'échanges. La même phrase ne se juge pas pareil au premier contact et en fin de négociation.
-Il classe en huit motifs : engagement prix, engagement contractuel, promesse intenable,
-concession prématurée, pression excessive, référence client, message inadapté au stade,
-exposition juridique — et cite la phrase en cause, comme un manager pointe la ligne.
+Hence a second layer: a model reads the message the way a sales director would before it goes
+out, with the opportunity's context — stage, amount, open objections, number of exchanges. The
+same sentence is not judged the same way on first contact and at the end of a negotiation. It
+classifies into eight grounds: price commitment, contractual commitment, unsupportable promise,
+premature concession, excessive pressure, customer reference, message inappropriate for the
+stage, legal exposure — and quotes the offending sentence, the way a manager points at the
+line.
 
-Quatre partis pris :
+Four deliberate positions:
 
-**Les couches se superposent, elles ne se remplacent pas.** Le socle lexical reste, toujours.
-Échanger une garantie déterministe contre un jugement probabiliste serait une régression : un
-classifieur se trompe, tombe en panne, et se contourne lui aussi.
+**The layers stack, they do not replace one another.** The lexical baseline stays, always.
+Trading a deterministic guarantee for a probabilistic judgement would be a regression: a
+classifier gets things wrong, goes down, and can be worked around too.
 
-**Le socle passe en premier, et court-circuite.** S'il a déjà tranché, inutile de payer un appel
-de modèle pour confirmer une certitude — et le motif reste auditable.
+**The baseline runs first, and short-circuits.** If it has already ruled, there is no point
+paying for a model call to confirm a certainty — and the rationale remains auditable.
 
-**Échec fermé.** Modèle injoignable, JSON illisible, catégorie inventée : le message est retenu.
-Un relecteur absent ne veut pas dire un message validé.
+**Fail closed.** Model unreachable, unreadable JSON, invented category: the message is held. An
+absent reviewer does not mean an approved message.
 
-**Le sur-blocage est un risque traité, pas ignoré.** Un relecteur qui retient tout n'est pas
-prudent : l'opérateur face à une file pleine de faux positifs finit par tout approuver sans
-lire, et le contrôle disparaît. Le prompt de relecture liste donc explicitement ce qui doit
-passer sans commentaire — prise de contact, relance courtoise, rappel du prix catalogue,
-réponse à une objection qui argumente sur la valeur.
+**Over-blocking is a risk that is handled, not ignored.** A reviewer that holds everything is
+not being careful: an operator facing a queue full of false positives ends up approving
+everything without reading, and the control disappears. The review prompt therefore explicitly
+lists what must pass without comment — an initial approach, a courteous follow-up, a restatement
+of list price, a reply to an objection that argues on value.
 
-Coût : un appel du modèle économique par action sortante, soit ~0,0003 $. La relecture ne
-s'exécute qu'en mode autonome — dans les autres modes le verdict est connu d'avance.
+Cost: one call to the cheap model per outbound action, i.e. ~$0.0003. Review only runs in
+autonomous mode — in the other modes the verdict is known in advance.
 
-## La boucle vocale, fermée
+## The voice loop, closed
 
 ```
-place_phone_call ──> POST /v2/create-phone-call (contexte sérialisé en strings)
+place_phone_call ──> POST /v2/create-phone-call (context serialised as strings)
        │
-   pendant l'appel ──> Retell appelle POST /retell/tool-call ──> ActionRegistry
+   during the call ──> Retell calls POST /retell/tool-call ──> ActionRegistry
        │
-   fin d'appel ──> call_analyzed ──> transcript + résumé ──> cycle de décision ──> CRM
+   end of call ──> call_analyzed ──> transcript + summary ──> decision cycle ──> CRM
 ```
 
-Trois contraintes vérifiées de l'API Retell sont câblées dans le code :
-`retell_llm_dynamic_variables` n'accepte que des **chaînes** (d'où l'aplatissement explicite du
-contexte) ; c'est `call_analyzed` et non `call_ended` qui porte le résumé et le sentiment ; le
-payload des custom functions est bien `{name, args, call}`.
+Three verified constraints of the Retell API are wired into the code:
+`retell_llm_dynamic_variables` only accepts **strings** (hence the explicit flattening of the
+context); it is `call_analyzed`, not `call_ended`, that carries the summary and the sentiment;
+and the custom-function payload really is `{name, args, call}`.
 
-GPT-5.6 ne figure pas dans les modèles proposés nativement par Retell : l'agent vocal tourne sur
-leur modèle, notre moteur garde la stratégie avant et après l'appel, et sert ses actions
-pendant. Le registre d'actions est partagé entre les deux — l'agent texte et l'agent vocal
-exécutent le même code, pas deux copies vouées à diverger.
+GPT-5.6 is not among the models Retell offers natively: the voice agent runs on their model,
+our engine keeps the strategy before and after the call, and serves its actions during it. The
+action registry is shared between the two — the text agent and the voice agent execute the same
+code, not two copies doomed to diverge.
 
-## Le CRM comme source de vérité unique
+## The CRM as the single source of truth
 
-Ce que l'agent apprend (objections, décisions, interactions) est écrit dans HubSpot sous forme
-de notes préfixées — lisibles par un humain dans l'interface, re-parsables par l'agent au scan
-suivant. Pas de base cachée à côté du CRM que les commerciaux ne verraient jamais.
+What the agent learns (objections, decisions, interactions) is written into HubSpot as prefixed
+notes — readable by a human in the UI, re-parsable by the agent on the next scan. No hidden
+database sitting next to the CRM that sales reps would never see.
 
-Corollaire assumé : une action dont il ne reste aucune trace dans le CRM n'a pas eu lieu du
-point de vue du commercial humain. Chaque action du registre écrit sa trace.
+An accepted corollary: an action that leaves no trace in the CRM did not happen, from the human
+sales rep's point of view. Every action in the registry writes its trace.
 
-Seul l'état d'exécution du scanner (pointeur, relances programmées, journal de cadence) vit à
-côté : c'est la mémoire de l'agent, pas la vérité commerciale, et les deux n'ont pas le même
-cycle de vie.
+Only the scanner's execution state (pointer, scheduled follow-ups, cadence log) lives alongside:
+that is the agent's memory, not the sales truth, and the two do not share the same lifecycle.
 
-## Sponsors intégrés
+## Sponsors integrated
 
-Trois, choisis parce qu'ils portent une fonction réelle du produit — pas pour cocher des cases.
+Three, chosen because they carry a real function of the product — not to tick boxes.
 
-| Sponsor | Fonction portée | Où vit le code |
+| Sponsor | Function carried | Where the code lives |
 |---|---|---|
-| **OpenAI + OpenRouter** | Le raisonnement, son routage par enjeu, la relecture des messages | Entièrement chez nous (`adapters/intelligence/`) |
-| **Trigger.dev** | L'autonomie : cron du scan, relances durables | Code chez nous, **exécution sur leur cloud** |
-| **Exa** | Le « qu'est-ce que je ne sais pas ? » : actualité du prospect | Entièrement chez nous (`adapters/intelligence/exa_enrichment.py`) |
+| **OpenAI + OpenRouter** | The reasoning, its stakes-based routing, message review | Entirely on our side (`adapters/intelligence/`) |
+| **Trigger.dev** | Autonomy: the scan cron, durable follow-ups | Code on our side, **execution on their cloud** |
+| **Exa** | The "what don't I know?": news about the prospect | Entirely on our side (`adapters/intelligence/exa_enrichment.py`) |
 
-Écartés en connaissance de cause : **Auth0** (l'essentiel est de la configuration dashboard, et
-son apport — la validation humaine — n'était démontrable qu'avec une UI), **Ambiguous AI**
-(aucune documentation API publique trouvée, impossible de planifier dessus), **Mozilla**
-(`any-llm` résout le même problème qu'OpenRouter ; faire les deux serait incohérent).
+Deliberately set aside: **Auth0** (most of it is dashboard configuration, and its contribution —
+human approval — was only demonstrable with a UI), **Ambiguous AI** (no public API documentation
+found, impossible to plan around), **Mozilla** (`any-llm` solves the same problem as OpenRouter;
+doing both would be incoherent).
 
-## Coûts
+## Costs
 
-Tarifs relevés sur le catalogue OpenRouter, pas dans une documentation tierce :
+Rates taken from the OpenRouter catalogue, not from third-party documentation:
 
-| Modèle | Entrée / sortie par MTok | Coût d'un cycle |
+| Model | Input / output per MTok | Cost of one cycle |
 |---|---|---|
-| `openai/gpt-5.6-luna` | 0,20 $ / 1,20 $ | ~0,001–0,003 $ |
-| `openai/gpt-5.6-terra` | 2,00 $ / 12,00 $ | — (fallback) |
-| `openai/gpt-5.6-sol` | 2,00 $ / 10,00 $ | ~0,008–0,02 $ |
+| `openai/gpt-5.6-luna` | $0.20 / $1.20 | ~$0.001–0.003 |
+| `openai/gpt-5.6-terra` | $2.00 / $12.00 | — (fallback) |
+| `openai/gpt-5.6-sol` | $2.00 / $10.00 | ~$0.008–0.02 |
 
-| Autre poste | Coût |
+| Other line item | Cost |
 |---|---|
-| Relecture d'un message sortant | ~0,0003 $ |
-| Recherche Exa | ~0,007 $ par requête (20 $ de crédits offerts, sans carte) |
-| Appel téléphonique Retell, 5 minutes | ~0,65 $ |
+| Review of one outbound message | ~$0.0003 |
+| Exa search | ~$0.007 per request ($20 of free credits, no card) |
+| Retell phone call, 5 minutes | ~$0.65 |
 
-Deux constats. D'abord, Sol est **nettement moins cher qu'annoncé** dans les comparatifs
-publics (2 $/10 $ et non 5 $/30 $), au point de coûter moins que Terra en sortie — le routage
-vers le modèle capable est donc peu pénalisant. Ensuite, le LLM n'est jamais le poste dominant :
-**la voix l'est, d'un facteur 30 à 600**. C'est ce qui justifie que l'agent réserve le téléphone
-aux moments où il apporte plus que l'écrit.
+Two observations. First, Sol is **significantly cheaper than advertised** in public comparisons
+($2/$10 rather than $5/$30), to the point of costing less than Terra on output — so routing to
+the capable model carries little penalty. Second, the LLM is never the dominant line item:
+**voice is, by a factor of 30 to 600**. That is what justifies the agent reserving the phone for
+the moments where it adds more than writing does.
 
-## Ce qu'il reste à faire
+## What is left to do
 
-- **Éprouver le discernement du relecteur** sur de vrais messages dès qu'une clé OpenRouter est
-  disponible. Le comportement *autour* du modèle est testé ; son jugement ne l'est pas.
-- **Vérifier le schéma exact de la signature Retell** (`X-Retell-Signature`) contre leur SDK :
-  l'implémentation actuelle fait un HMAC-SHA256 standard.
-- **Charger le dataset Kaggle** « CRM Sales Opportunities » dans HubSpot pour un portefeuille
-  réaliste (`accounts.csv`, `products.csv`).
-- **Migrer vers le versionnage par date de HubSpot** (`/crm/objects/2026-09/`) : les chemins
-  v3/v4 utilisés restent supportés, mais ne sont plus la recommandation.
-- **Remplacer les adapters JSON par Postgres** au-delà d'une instance — le port ne change pas.
+- **Test the reviewer's judgement** on real messages as soon as an OpenRouter key is available.
+  The behaviour *around* the model is tested; its judgement is not.
+- **Verify the exact scheme of the Retell signature** (`X-Retell-Signature`) against their SDK:
+  the current implementation does a standard HMAC-SHA256.
+- **Load the Kaggle dataset** "CRM Sales Opportunities" into HubSpot for a realistic book of
+  business (`accounts.csv`, `products.csv`).
+- **Migrate to HubSpot's date-based versioning** (`/crm/objects/2026-09/`): the v3/v4 paths in
+  use remain supported, but are no longer the recommendation.
+- **Replace the JSON adapters with Postgres** beyond a single instance — the port does not
+  change.

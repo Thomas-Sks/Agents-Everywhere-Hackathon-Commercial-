@@ -1,8 +1,8 @@
-"""Use case : arbitrage humain sur une action mise en attente.
+"""Use case: human arbitration on an action that has been held.
 
-C'est le point de contrôle réel de l'opérateur. Tant qu'une action est en attente, rien n'est
-parti chez le prospect — approuver l'exécute telle qu'elle a été rédigée, rejeter la classe
-en laissant une trace dans le CRM.
+This is the operator's real control point. As long as an action is pending, nothing has reached
+the prospect — approving executes it exactly as it was drafted, rejecting files it away while
+leaving a trace in the CRM.
 """
 
 from __future__ import annotations
@@ -61,8 +61,8 @@ class ReviewApproval:
         self._approvals.mark(approval_id, ApprovalStatus.REJECTED, reviewer, note)
         logger.info("Demande %s rejetée par %s", approval_id, reviewer)
 
-        # La trace du refus compte autant que celle d'un envoi : c'est elle qui permettra plus
-        # tard de comprendre pourquoi l'agent n'a pas agi.
+        # The record of a refusal matters as much as the record of a send: it is what will
+        # later explain why the agent did not act.
         self._crm.record_interaction(
             approval.opportunity_id,
             Interaction(

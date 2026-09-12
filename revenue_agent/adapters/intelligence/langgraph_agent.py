@@ -1,18 +1,18 @@
-"""Adapter du moteur de décision — LangGraph + GPT-5.6 via OpenRouter.
+"""Decision engine adapter — LangGraph + GPT-5.6 via OpenRouter.
 
-Deux points de conception méritent d'être explicités :
+Two design points are worth spelling out:
 
-**Le routage par enjeu.** Une relance de routine et une négociation à 200 k€ ne méritent pas le
-même modèle. `decide(strategic=True)` route vers un modèle plus capable ; le reste tourne sur le
-tier économique. C'est le prolongement direct de la thèse produit : l'agent décide aussi combien
-de raisonnement l'affaire justifie.
+**Stakes-based routing.** A routine follow-up and a €200k negotiation do not deserve the same
+model. `decide(strategic=True)` routes to a more capable model; everything else runs on the
+economy tier. This is a direct extension of the product thesis: the agent also decides how much
+reasoning the deal warrants.
 
-**Les tools ne contiennent aucune logique.** Ils exposent au modèle les actions de
-`ActionRegistry` — les mêmes que celles appelées par l'agent vocal via webhook. Ici ne vivent
-que les descriptions destinées au modèle, qui sont sa véritable documentation d'usage.
+**The tools contain no logic.** They expose `ActionRegistry`'s actions to the model — the very
+same ones the voice agent calls through the webhook. All that lives here are the descriptions
+aimed at the model, which are its real usage documentation.
 
-Une erreur d'adapter est convertie en message rendu au modèle plutôt qu'en exception : l'agent
-peut alors changer de canal ou escalader, ce qu'un crash lui interdirait.
+An adapter error is turned into a message handed back to the model rather than an exception:
+the agent can then switch channel or escalate, which a crash would forbid.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "decision_engine
 
 
 def _guard(func: Callable[..., str]) -> Callable[..., str]:
-    """Convertit les échecs en réponse textuelle exploitable par le modèle."""
+    """Turns failures into a textual response the model can work with."""
 
     @wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> str:
@@ -99,8 +99,8 @@ class LangGraphDecisionAgent:
             timeout=90,
             max_retries=2,
             default_headers={"X-Title": "Autonomous Revenue Agent"},
-            # Fallback natif OpenRouter : si le modèle principal est indisponible, la requête
-            # bascule de leur côté, sans retry à gérer chez nous.
+            # Native OpenRouter fallback: if the primary model is unavailable, the request
+            # switches over on their side, with no retry logic for us to manage.
             model_kwargs={"models": list(openrouter.fallback_models)},
         )
 
@@ -115,48 +115,48 @@ class LangGraphDecisionAgent:
         @tool
         @_guard
         def get_opportunity_context(opportunity_id: str) -> str:
-            """Relire l'état complet d'une opportunité avant toute décision : entreprise,
-            interlocuteurs et leurs rôles, stade, objections ouvertes, historique, et surtout
-            les canaux réellement joignables.
+            """Read back the full state of an opportunity before any decision: company,
+            stakeholders and their roles, stage, open objections, history, and above all the
+            channels that are actually reachable.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
+                opportunity_id: Identifier of the opportunity.
             """
             return actions.get_opportunity_context(opportunity_id)
 
         @tool
         @_guard
         def get_product_info(product_id: str = "") -> str:
-            """Consulter les fiches produits (nom, catégorie, prix, description). Ne jamais
-            citer un prix ou une caractéristique sans être passé par cet outil.
+            """Look up the product sheets (name, category, price, description). Never quote a
+            price or a feature without having gone through this tool first.
 
             Args:
-                product_id: Identifiant d'un produit précis, ou vide pour tout le catalogue.
+                product_id: Identifier of a specific product, or empty for the whole catalogue.
             """
             return actions.get_product_info(product_id)
 
         @tool
         @_guard
         def research_prospect(company_name: str) -> str:
-            """Chercher sur le web l'actualité récente du prospect (levée de fonds,
-            recrutements, nomination de dirigeants) pour combler ce que le CRM ne dit pas.
-            À utiliser quand il manque un élément de contexte pour décider.
+            """Search the web for the prospect's recent news (funding rounds, hiring,
+            executive appointments) to fill in what the CRM does not say. Use it when a piece
+            of context is missing before deciding.
 
             Args:
-                company_name: Nom de l'entreprise à rechercher.
+                company_name: Name of the company to research.
             """
             return actions.research_prospect(company_name)
 
         @tool
         @_guard
         def record_interaction(opportunity_id: str, channel: str, summary: str) -> str:
-            """Consigner dans le CRM ce qui vient de se passer ou d'être appris. À appeler
-            après chaque échange significatif, même si aucune action externe n'est prise.
+            """Record in the CRM what has just happened or been learned. Call it after every
+            significant exchange, even when no external action is taken.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                channel: Canal concerné ("email", "whatsapp", "voice", "signal", "decision").
-                summary: Résumé factuel de l'événement ou de l'apprentissage.
+                opportunity_id: Identifier of the opportunity.
+                channel: Channel concerned ("email", "whatsapp", "voice", "signal", "decision").
+                summary: Factual summary of the event or of what was learned.
             """
             return actions.record_interaction(opportunity_id, channel, summary)
 
@@ -170,15 +170,15 @@ class LangGraphDecisionAgent:
             objection_root_cause: str = "",
             next_steps: str = "",
         ) -> str:
-            """Mettre à jour la représentation de l'opportunité dans le CRM.
+            """Update the representation of the opportunity in the CRM.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                stage: Nouveau stade commercial, si changé.
-                probability: Nouvelle probabilité de conversion (0-100), -1 si inchangée.
-                objection: Objection nouvellement détectée, le cas échéant.
-                objection_root_cause: Cause profonde estimée de cette objection.
-                next_steps: Prochaine étape décidée.
+                opportunity_id: Identifier of the opportunity.
+                stage: New sales stage, if it changed.
+                probability: New conversion probability (0-100), -1 if unchanged.
+                objection: Newly detected objection, if any.
+                objection_root_cause: Estimated root cause of that objection.
+                next_steps: Next step decided on.
             """
             return actions.update_opportunity(
                 opportunity_id,
@@ -191,68 +191,91 @@ class LangGraphDecisionAgent:
 
         @tool
         @_guard
-        def resolve_objection(opportunity_id: str, objection_id: str, resolution: str) -> str:
-            """Clôturer une objection que tu as traitée. À faire dès qu'une objection n'est
-            plus d'actualité — le prospect a obtenu sa réponse, la contrainte a disparu, ou
-            elle s'est révélée infondée.
-
-            Une objection laissée ouverte alors qu'elle est réglée pollue durablement
-            l'analyse de l'opportunité.
+        def update_stakeholder(
+            opportunity_id: str,
+            name: str,
+            stance: str,
+            role: str = "",
+            notes: str = "",
+        ) -> str:
+            """Consigner qui décide, qui influence, qui bloque. Une vente complexe échoue
+            rarement à cause du produit seul : tiens cette carte à jour dès que tu apprends
+            le rôle réel de quelqu'un, y compris pour une personne jamais contactée dont on
+            t'a seulement parlé.
 
             Args:
                 opportunity_id: Identifiant de l'opportunité.
-                objection_id: Identifiant de l'objection, tel qu'il figure dans le contexte.
-                resolution: Comment elle a été levée, en une phrase.
+                name: Nom de la personne, tel qu'il apparaît dans le CRM si elle y figure.
+                stance: "champion", "decideur", "opposant", "neutre" ou "inconnu".
+                role: Fonction dans l'entreprise, si connue.
+                notes: Ce qui justifie cette posture, en une phrase.
+            """
+            return actions.update_stakeholder(opportunity_id, name, stance, role, notes)
+
+        @tool
+        @_guard
+        def resolve_objection(opportunity_id: str, objection_id: str, resolution: str) -> str:
+            """Close an objection you have dealt with. Do it as soon as an objection is no
+            longer live — the prospect got their answer, the constraint disappeared, or it
+            turned out to be unfounded.
+
+            An objection left open once it is settled durably distorts the reading of the
+            opportunity.
+
+            Args:
+                opportunity_id: Identifier of the opportunity.
+                objection_id: Identifier of the objection, exactly as shown in the context.
+                resolution: How it was lifted, in one sentence.
             """
             return actions.resolve_objection(opportunity_id, objection_id, resolution)
 
         @tool
         @_guard
         def send_email(opportunity_id: str, subject: str, body: str) -> str:
-            """Envoyer un email au prospect. L'adresse est résolue depuis le CRM : ne la
-            devine jamais.
+            """Send an email to the prospect. The address is resolved from the CRM: never
+            guess it.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                subject: Objet de l'email.
-                body: Corps du message.
+                opportunity_id: Identifier of the opportunity.
+                subject: Subject line of the email.
+                body: Body of the message.
             """
             return actions.send_email(opportunity_id, subject, body)
 
         @tool
         @_guard
         def send_whatsapp_message(opportunity_id: str, message: str) -> str:
-            """Envoyer un message WhatsApp au prospect. Le numéro est résolu depuis le CRM.
+            """Send a WhatsApp message to the prospect. The number is resolved from the CRM.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                message: Contenu du message.
+                opportunity_id: Identifier of the opportunity.
+                message: Content of the message.
             """
             return actions.send_whatsapp_message(opportunity_id, message)
 
         @tool
         @_guard
         def place_phone_call(opportunity_id: str, objective: str) -> str:
-            """Déclencher un appel téléphonique sortant, conduit par l'agent vocal. À réserver
-            aux situations où la voix apporte plus que l'écrit.
+            """Trigger an outbound phone call, conducted by the voice agent. Reserve it for
+            situations where the voice brings more than the written word.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                objective: Objectif précis de l'appel, transmis à l'agent vocal.
+                opportunity_id: Identifier of the opportunity.
+                objective: Precise objective of the call, passed on to the voice agent.
             """
             return actions.place_phone_call(opportunity_id, objective)
 
         @tool
         @_guard
         def schedule_follow_up(opportunity_id: str, reason: str, due_date: str) -> str:
-            """Décider volontairement de ne rien faire maintenant et programmer une reprise.
-            C'est une décision commerciale à part entière : le scan périodique réveillera
-            l'opportunité à la date indiquée.
+            """Deliberately decide to do nothing now and schedule a re-engagement. This is a
+            sales decision in its own right: the periodic scan will wake the opportunity up on
+            the given date.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                reason: Pourquoi agir maintenant serait contre-productif.
-                due_date: Date de reprise au format AAAA-MM-JJ.
+                opportunity_id: Identifier of the opportunity.
+                reason: Why acting now would be counterproductive.
+                due_date: Re-engagement date in YYYY-MM-DD format.
             """
             return actions.schedule_follow_up(opportunity_id, reason, due_date)
 
@@ -261,17 +284,18 @@ class LangGraphDecisionAgent:
         def escalate_to_human(
             opportunity_id: str, reason: str, urgency: str, context_brief: str
         ) -> str:
-            """Passer la main à un commercial humain avec l'intégralité du contexte.
+            """Hand the deal over to a human sales rep with the full context.
 
-            context_brief doit contenir : qui est l'interlocuteur, son problème réel, la cause
-            profonde de ses objections, qui d'autre décide, ce qui a été demandé, et ce qu'il
-            reste à traiter au prochain échange. Jamais « appelle Jean, il est intéressé ».
+            context_brief must contain: who the contact is, their real problem, the root cause
+            of their objections, who else decides, what was asked for, and what remains to be
+            handled at the next exchange. Never "call Jean, he's interested".
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                reason: Pourquoi la situation dépasse les limites d'autonomie de l'agent.
-                urgency: "faible", "normale" ou "haute".
-                context_brief: Brief complet et structuré pour le commercial humain.
+                opportunity_id: Identifier of the opportunity.
+                reason: Why the situation exceeds the agent's autonomy limits.
+                urgency: "faible", "normale" or "haute" (these exact values are mapped to
+                    HubSpot task priorities).
+                context_brief: Full, structured brief for the human sales rep.
             """
             return actions.escalate_to_human(opportunity_id, reason, urgency, context_brief)
 
@@ -281,6 +305,7 @@ class LangGraphDecisionAgent:
             research_prospect,
             record_interaction,
             update_opportunity,
+            update_stakeholder,
             resolve_objection,
             send_email,
             send_whatsapp_message,

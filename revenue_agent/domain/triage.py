@@ -1,12 +1,11 @@
-"""Triage déterministe des opportunités — le cœur du scan périodique.
+"""Deterministic triage of opportunities — the heart of the periodic scan.
 
-Aucun appel LLM, aucun appel réseau : c'est volontaire. Un scan peut remonter des centaines de
-deals modifiés ; faire raisonner un modèle sur chacun coûterait cher pour, la plupart du temps,
-conclure qu'il n'y a rien à faire. Le triage répond à la question bon marché — « cette
-opportunité mérite-t-elle qu'on y réfléchisse maintenant ? » — et seules celles qui passent
-déclenchent un cycle de décision.
+No LLM call, no network call: that is deliberate. A scan can surface hundreds of modified
+deals; having a model reason over each one would cost a fortune to conclude, most of the time,
+that there is nothing to do. Triage answers the cheap question — "does this opportunity deserve
+thinking about right now?" — and only the ones that pass trigger a decision cycle.
 
-Fonctions pures, donc testables sans infrastructure.
+Pure functions, therefore testable without infrastructure.
 """
 
 from __future__ import annotations
@@ -25,8 +24,8 @@ class TriggerKind(StrEnum):
     INACTIVITY = "inactivite"
 
 
-# Un même deal peut satisfaire plusieurs règles sur un tick. L'ordre ci-dessous tranche :
-# un signal frais (le prospect a bougé) prime toujours sur un signal d'absence (rien n'a bougé).
+# A single deal can satisfy several rules on the same tick. The ordering below settles it:
+# a fresh signal (the prospect moved) always wins over a signal of absence (nothing moved).
 _PRIORITY: dict[TriggerKind, int] = {
     TriggerKind.STAGE_CHANGED: 0,
     TriggerKind.NEW_LEAD: 1,
@@ -49,7 +48,7 @@ class Trigger:
 
 @dataclass(frozen=True, slots=True)
 class KnownDealState:
-    """Ce que l'application sait déjà d'un deal, d'un scan sur l'autre."""
+    """What the application already knows about a deal, from one scan to the next."""
 
     stage: str = ""
     last_decision_at: datetime | None = None
@@ -62,11 +61,12 @@ def select_triggers(
     now: datetime,
     inactivity_days: int,
 ) -> list[Trigger]:
-    """Sélectionne les opportunités méritant un cycle de décision.
+    """Select the opportunities that deserve a decision cycle.
 
-    `snapshots` = ce que le CRM signale comme modifié depuis le dernier scan.
-    `known_states` = la mémoire applicative, qui permet de détecter aussi les *absences*
-    (relance arrivée à échéance, silence prolongé) qu'aucun scan de modifications ne remonte.
+    `snapshots` = what the CRM reports as modified since the last scan.
+    `known_states` = the application's own memory, which also makes it possible to detect
+    *absences* (a follow-up falling due, prolonged silence) that no scan of modifications
+    would ever surface.
     """
     candidates: list[Trigger] = []
     candidates.extend(_from_snapshots(snapshots, known_states, now))
@@ -154,7 +154,7 @@ def _from_known_states(
 
 
 def _keep_highest_priority_per_opportunity(triggers: list[Trigger]) -> list[Trigger]:
-    """Un cycle de décision par opportunité et par scan, au maximum."""
+    """At most one decision cycle per opportunity, per scan."""
     best: dict[str, Trigger] = {}
     for trigger in triggers:
         current = best.get(trigger.opportunity_id)

@@ -1,8 +1,8 @@
-"""Jeu de données de démonstration pour les adapters locaux.
+"""Demonstration dataset for the local adapters.
 
-Alimente le CRM JSON et le catalogue quand ils sont vides, pour que `make demo` produise
-quelque chose de significatif sans dépendre d'un compte HubSpot. Remplaçable par
-`scripts/load_dataset.py`, qui importe le dataset Kaggle « CRM Sales Opportunities ».
+Populates the JSON CRM and the catalogue when they are empty, so that `make demo` produces
+something meaningful without depending on a HubSpot account. Replaceable by
+`scripts/load_dataset.py`, which imports the Kaggle "CRM Sales Opportunities" dataset.
 """
 
 from __future__ import annotations

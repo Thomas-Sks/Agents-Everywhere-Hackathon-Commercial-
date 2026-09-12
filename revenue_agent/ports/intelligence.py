@@ -1,7 +1,7 @@
-"""Ports d'intelligence — enrichissement du contexte et prise de décision.
+"""Intelligence ports — context enrichment and decision making.
 
-`DecisionAgentPort` est ce qui rend le produit testable : le domaine peut être exercé avec un
-agent bouchonné, sans appeler ni OpenRouter ni aucun modèle.
+`DecisionAgentPort` is what makes the product testable: the domain can be exercised with a
+stubbed agent, without calling OpenRouter or any model at all.
 """
 
 from __future__ import annotations
@@ -13,20 +13,20 @@ from revenue_agent.domain.review import MessageUnderReview, ReviewFinding
 
 
 class EnrichmentPort(Protocol):
-    """Recherche web qualifiée — répond au « qu'est-ce que je ne sais pas ? » du concept."""
+    """Qualified web search — answers the concept's "what don't I know?" question."""
 
     def research_company(
         self, company_name: str, *, since_days: int = 90, limit: int = 5
     ) -> list[ProspectInsight]:
-        """Actualité récente : levée de fonds, recrutements, changements de direction."""
+        """Recent news: funding rounds, hiring, changes in leadership."""
         ...
 
 
 class MessageReviewPort(Protocol):
-    """Relecture d'un message avant envoi, comme le ferait un directeur commercial.
+    """Reviewing a message before it goes out, the way a sales director would.
 
-    Contrat impératif : **une relecture impossible n'est pas une relecture favorable**. Toute
-    implémentation qui ne peut pas conclure doit escalader, jamais laisser passer.
+    Mandatory contract: **a review that could not happen is not a favourable review**. Any
+    implementation unable to reach a conclusion must escalate, never let the message through.
     """
 
     def review(self, message: MessageUnderReview) -> ReviewFinding: ...
@@ -34,11 +34,11 @@ class MessageReviewPort(Protocol):
 
 class DecisionAgentPort(Protocol):
     def decide(self, *, opportunity: Opportunity, event: str, strategic: bool = False) -> str:
-        """Fait raisonner l'agent sur un événement et exécute les actions qu'il choisit.
+        """Has the agent reason about an event and carries out the actions it chooses.
 
-        `strategic=True` route vers un modèle plus capable : le coût du raisonnement suit
-        l'enjeu commercial, pas l'inverse.
+        `strategic=True` routes to a more capable model: the cost of reasoning follows the
+        sales stakes, not the other way round.
 
-        Retourne la synthèse textuelle de ce que l'agent a décidé.
+        Returns a textual summary of what the agent decided.
         """
         ...

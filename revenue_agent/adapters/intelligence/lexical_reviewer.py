@@ -1,11 +1,11 @@
-"""Relecture lexicale — le socle déterministe.
+"""Lexical review — the deterministic baseline.
 
-Volontairement simple et sans appel réseau : c'est la garantie qui tient quand le classifieur
-sémantique est indisponible, lent, ou se trompe. Elle n'attrape que ce qui se nomme
-explicitement, mais elle l'attrape toujours, de façon reproductible et auditable.
+Deliberately simple and free of network calls: this is the guarantee that holds when the
+semantic classifier is unavailable, slow, or wrong. It only catches what names itself
+explicitly, but it always catches it, reproducibly and auditably.
 
-Ne jamais retirer cette couche au motif que le classifieur fait mieux : une garantie
-probabiliste ne remplace pas une garantie déterministe, elle s'y ajoute.
+Never remove this layer on the grounds that the classifier does better: a probabilistic
+guarantee does not replace a deterministic one, it is added on top of it.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ _PATTERNS: tuple[tuple[str, ReviewCategory, str], ...] = (
 
 
 class LexicalMessageReviewer:
-    """Implémente `MessageReviewPort` sans modèle ni réseau."""
+    """Implements `MessageReviewPort` with no model and no network."""
 
     def review(self, message: MessageUnderReview) -> ReviewFinding:
         for pattern, category, rationale in _PATTERNS:
@@ -63,7 +63,7 @@ class LexicalMessageReviewer:
 
 
 def _surrounding_sentence(content: str, position: int) -> str:
-    """Extrait la phrase contenant le passage repéré — un motif isolé ne se relit pas."""
+    """Extracts the sentence containing the match — an isolated pattern cannot be reviewed."""
     start = max(content.rfind(".", 0, position), content.rfind("\n", 0, position)) + 1
     end_candidates = [
         index

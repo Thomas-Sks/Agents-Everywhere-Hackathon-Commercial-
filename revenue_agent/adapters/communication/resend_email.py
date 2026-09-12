@@ -1,4 +1,4 @@
-"""Adapter email — Resend."""
+"""Email adapter — Resend."""
 
 from __future__ import annotations
 

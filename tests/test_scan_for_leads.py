@@ -1,4 +1,4 @@
-"""Boucle de scan : budget, fenêtre de recouvrement, résistance aux pannes."""
+"""Scan loop: budget, overlap window, resilience to outages."""
 
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ def build_scanner(crm, scan_state, agent, *, max_decisions: int = 5) -> ScanForL
 
 
 def mark_already_running(scan_state) -> None:
-    """Place le scanner en régime établi : le premier scan a une sémantique différente
-    (inventaire du portefeuille), couverte par ses propres tests plus bas."""
+    """Put the scanner into steady state: the very first scan has different semantics
+    (taking inventory of the book of business), covered by its own tests further down."""
     scan_state.pointer = NOW - timedelta(minutes=10)
 
 
-def test_nouveau_lead_declenche_un_cycle_de_decision(crm, scan_state, agent):
+def test_a_new_lead_triggers_a_decision_cycle(crm, scan_state, agent):
     mark_already_running(scan_state)
     crm.snapshots = [
         DealSnapshot(id="acme-co", name="Acme Co", stage="qualification", last_modified_at=NOW)
@@ -42,7 +42,7 @@ def test_nouveau_lead_declenche_un_cycle_de_decision(crm, scan_state, agent):
     assert agent.calls[0]["opportunity_id"] == "acme-co"
 
 
-def test_le_budget_par_scan_est_respecte_et_le_surplus_reporte(crm, scan_state, agent):
+def test_the_per_scan_budget_is_respected_and_the_surplus_deferred(crm, scan_state, agent):
     mark_already_running(scan_state)
     for index in range(4):
         opportunity_id = f"deal-{index}"
@@ -61,8 +61,8 @@ def test_le_budget_par_scan_est_respecte_et_le_surplus_reporte(crm, scan_state, 
     assert len(agent.calls) == 2
 
 
-def test_le_pointeur_navance_pas_si_le_crm_est_indisponible(crm, scan_state, agent):
-    """Sinon la fenêtre manquée serait considérée comme traitée, et les leads perdus."""
+def test_the_pointer_does_not_advance_when_the_crm_is_unavailable(crm, scan_state, agent):
+    """Otherwise the missed window would be treated as processed, and the leads lost."""
     crm.fail_on_search = True
     scan_state.pointer = NOW - timedelta(hours=1)
 
@@ -72,14 +72,14 @@ def test_le_pointeur_navance_pas_si_le_crm_est_indisponible(crm, scan_state, age
     assert scan_state.pointer == NOW - timedelta(hours=1)
 
 
-def test_le_pointeur_avance_apres_un_scan_reussi(crm, scan_state, agent):
+def test_the_pointer_advances_after_a_successful_scan(crm, scan_state, agent):
     build_scanner(crm, scan_state, agent).execute()
 
     assert scan_state.pointer is not None
 
 
-def test_une_opportunite_en_echec_ninterrompt_pas_les_suivantes(crm, scan_state, agent):
-    """Un deal absent du CRM ne doit pas arrêter la boucle autonome."""
+def test_one_failing_opportunity_does_not_interrupt_the_following_ones(crm, scan_state, agent):
+    """A deal missing from the CRM must not stop the autonomous loop."""
     mark_already_running(scan_state)
     crm.snapshots = [
         DealSnapshot(id="fantome", name="Inconnu", stage="x", last_modified_at=NOW),
@@ -92,10 +92,10 @@ def test_une_opportunite_en_echec_ninterrompt_pas_les_suivantes(crm, scan_state,
     assert [item.opportunity_id for item in report.processed] == ["acme-co"]
 
 
-def test_le_premier_scan_adopte_le_portefeuille_sans_relancer_les_deals_actifs(
+def test_the_first_scan_adopts_the_book_without_re_engaging_active_deals(
     crm, scan_state, agent
 ):
-    """Jour 1 : on n'écrit pas à 500 prospects parce qu'on vient d'installer l'agent."""
+    """Day 1: you do not write to 500 prospects just because the agent was installed."""
     crm.snapshots = [
         DealSnapshot(
             id="acme-co",
@@ -111,8 +111,8 @@ def test_le_premier_scan_adopte_le_portefeuille_sans_relancer_les_deals_actifs(
     assert scan_state.states["acme-co"].stage == "qualification"
 
 
-def test_le_premier_scan_reveille_immediatement_les_deals_dormants(crm, scan_state, agent):
-    """L'inverse du test précédent : un deal oublié depuis des mois est la valeur du jour 1."""
+def test_the_first_scan_immediately_wakes_dormant_deals(crm, scan_state, agent):
+    """The mirror image of the previous test: a deal forgotten for months is the day-1 value."""
     crm.snapshots = [
         DealSnapshot(
             id="acme-co",
@@ -128,7 +128,7 @@ def test_le_premier_scan_reveille_immediatement_les_deals_dormants(crm, scan_sta
     assert report.processed[0].trigger == "inactivite"
 
 
-def test_la_relance_programmee_est_consommee_apres_traitement(crm, scan_state, agent):
+def test_the_scheduled_follow_up_is_consumed_once_processed(crm, scan_state, agent):
     scan_state.states["acme-co"] = KnownDealState(
         stage="qualification", follow_up_due_at=NOW - timedelta(days=1)
     )

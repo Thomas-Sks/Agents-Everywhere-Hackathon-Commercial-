@@ -1,8 +1,8 @@
-"""File de validation sur fichier JSON — implémente `ApprovalPort`.
+"""Approval queue on a JSON file — implements `ApprovalPort`.
 
-Conserve aussi l'horodatage des envois réellement émis, qui alimente la règle de cadence
-(« pas plus de N messages par prospect sur 24 h »). Cette information ne peut pas venir du CRM
-seul : un message mis en attente de validation ne doit pas compter comme envoyé.
+It also keeps timestamps of messages actually sent, which feeds the rate rule ("no more than N
+messages per prospect in 24 h"). That information cannot come from the CRM alone: a message
+held for approval must not count as sent.
 """
 
 from __future__ import annotations
@@ -69,8 +69,8 @@ class JsonFileApprovalAdapter:
         with self._document.update() as data:
             log = data.setdefault(SENT_KEY, {})
             entries = log.get(opportunity_id, [])
-            # Purge glissante : ce journal ne sert qu'à la cadence récente, inutile de le
-            # laisser croître indéfiniment.
+            # Rolling purge: this journal only serves the recent rate check, there is no point
+            # letting it grow indefinitely.
             entries = [e for e in entries if (_parse(e) or now) >= cutoff]
             entries.append(now.isoformat())
             log[opportunity_id] = entries

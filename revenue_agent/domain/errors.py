@@ -1,19 +1,19 @@
-"""Erreurs du domaine et des adapters.
+"""Domain and adapter errors.
 
-Principe : un adapter **lève** quand il échoue, il ne renvoie pas `None` silencieusement. La
-dégradation gracieuse est une décision applicative, prise dans les use cases, pas une
-convention implicite disséminée dans chaque intégration.
+Principle: an adapter **raises** when it fails, it does not silently return `None`. Graceful
+degradation is an application-level decision, taken in the use cases, not an implicit convention
+scattered across every integration.
 """
 
 from __future__ import annotations
 
 
 class RevenueAgentError(Exception):
-    """Racine de toutes les erreurs applicatives."""
+    """Root of every application-level error."""
 
 
 class AdapterError(RevenueAgentError):
-    """Échec d'un système externe (CRM, email, voix, enrichissement)."""
+    """Failure of an external system (CRM, email, voice, enrichment)."""
 
     def __init__(self, adapter: str, message: str) -> None:
         super().__init__(f"[{adapter}] {message}")
@@ -44,7 +44,7 @@ class OpportunityNotFound(RevenueAgentError):
 
 
 class ChannelUnavailable(RevenueAgentError):
-    """L'agent a choisi un canal dont la coordonnée n'existe pas pour ce prospect."""
+    """The agent picked a channel whose contact details do not exist for this prospect."""
 
     def __init__(self, opportunity_id: str, channel: str) -> None:
         super().__init__(
@@ -56,7 +56,7 @@ class ChannelUnavailable(RevenueAgentError):
 
 
 class AuthorizationRequired(RevenueAgentError):
-    """L'action dépasse les limites d'autonomie de l'agent."""
+    """The action exceeds the agent's autonomy limits."""
 
     def __init__(self, action: str, reason: str) -> None:
         super().__init__(f"Action '{action}' refusée : {reason}")

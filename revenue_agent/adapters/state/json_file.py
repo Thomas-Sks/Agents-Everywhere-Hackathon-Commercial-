@@ -1,8 +1,8 @@
-"""État opérationnel du scanner sur fichier JSON — implémente `ScanStatePort`.
+"""Scanner operational state on a JSON file — implements `ScanStatePort`.
 
-Contient le pointeur du dernier scan et, par opportunité, le dernier stade connu, la date de
-la dernière décision et l'éventuelle relance programmée. C'est la mémoire d'exécution de
-l'agent, distincte de la vérité commerciale qui, elle, vit dans le CRM.
+Holds the last scan pointer and, per opportunity, the last known stage, the date of the last
+decision and any scheduled follow-up. This is the agent's execution memory, distinct from the
+sales truth, which lives in the CRM.
 """
 
 from __future__ import annotations

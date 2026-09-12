@@ -1,22 +1,22 @@
 /**
- * Orchestration longue durée — Trigger.dev.
+ * Long-running orchestration — Trigger.dev.
  *
- * C'est la brique qui rend l'agent réellement autonome : sans elle, quelqu'un doit lancer le
- * scan à la main, et « agent commercial autonome » devient un abus de langage.
+ * This is the piece that makes the agent genuinely autonomous: without it, someone has to
+ * launch the scan by hand, and "autonomous sales agent" becomes a misnomer.
  *
- * Trigger.dev n'a pas de SDK Python ; le pattern retenu est donc une tâche TypeScript mince
- * qui appelle notre API FastAPI en HTTP. Le raisonnement reste intégralement en Python, seule
- * la cadence vit ici.
+ * Trigger.dev has no Python SDK; the chosen pattern is therefore a thin TypeScript task that
+ * calls our FastAPI over HTTP. The reasoning stays entirely in Python, only the cadence lives
+ * here.
  *
- * Deux tâches, deux rôles :
+ * Two tasks, two roles:
  *
- * 1. `scanCrm` (cron) — le battement de cœur. C'est le mécanisme principal : les relances
- *    programmées sont stockées côté Python et détectées par le triage, ce qui garantit une
- *    source de vérité unique pour « quand réveiller cette opportunité ».
+ * 1. `scanCrm` (cron) — the heartbeat. This is the primary mechanism: scheduled follow-ups are
+ *    stored on the Python side and detected by triage, which guarantees a single source of
+ *    truth for "when to wake this opportunity up".
  *
- * 2. `scheduleFollowUp` (waitpoint durable) — pour programmer une reprise ponctuelle sans
- *    attendre le prochain tick. Utile en démo (« je programme une relance dans deux minutes,
- *    elle part toute seule ») et pour une échéance précise à l'heure près.
+ * 2. `scheduleFollowUp` (durable waitpoint) — to schedule a one-off re-engagement without
+ *    waiting for the next tick. Useful for demos ("I schedule a follow-up two minutes out and
+ *    it fires on its own") and for a deadline that has to be accurate to the hour.
  */
 
 import { logger, schedules, task, wait } from "@trigger.dev/sdk";
@@ -48,8 +48,8 @@ async function runScan(): Promise<ScanReport> {
   });
 
   if (!response.ok) {
-    // On lève : Trigger.dev applique alors sa politique de retry, plutôt que de marquer
-    // silencieusement un scan raté comme réussi.
+    // We throw: Trigger.dev then applies its retry policy, rather than silently marking a
+    // failed scan as successful.
     throw new Error(`Scan refusé par l'API (${response.status}) : ${await response.text()}`);
   }
 
@@ -58,8 +58,8 @@ async function runScan(): Promise<ScanReport> {
 
 export const scanCrm = schedules.task({
   id: "scan-crm",
-  // Toutes les 5 minutes. La contrainte dimensionnante est la Search API HubSpot, plafonnée
-  // à 4 requêtes/seconde partagées entre tous les objets : inutile de scanner plus souvent.
+  // Every 5 minutes. The sizing constraint is the HubSpot Search API, capped at 4
+  // requests/second shared across all objects: there is no point scanning more often.
   cron: "*/5 * * * *",
   run: async () => {
     const report = await runScan();
@@ -72,7 +72,8 @@ export const scanCrm = schedules.task({
     });
 
     if (!report.crm_disponible) {
-      // Le pointeur n'a pas avancé côté Python : la fenêtre sera rejouée au prochain tick.
+      // The pointer did not advance on the Python side: the window will be replayed on the
+      // next tick.
       logger.warn("CRM indisponible pendant ce scan — fenêtre non consommée");
     }
 
@@ -93,8 +94,8 @@ export const scheduleFollowUp = task({
   run: async (payload: { opportunityId: string; delaySeconds: number }) => {
     logger.info(`Relance programmée pour ${payload.opportunityId}`, payload);
 
-    // Waitpoint durable : la tâche est suspendue et ses ressources libérées. Elle reprend
-    // exactement ici, même des semaines plus tard, sans process maintenu en vie.
+    // Durable waitpoint: the task is suspended and its resources released. It resumes
+    // exactly here, even weeks later, with no process kept alive.
     await wait.for({ seconds: payload.delaySeconds });
 
     const report = await runScan();

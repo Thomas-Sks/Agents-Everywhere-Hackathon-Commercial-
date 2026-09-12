@@ -1,11 +1,11 @@
-"""Superposition des deux relectures.
+"""Layering the two reviews.
 
-Le socle lexical s'exécute toujours et en premier : il est gratuit, instantané et déterministe.
-S'il escalade, inutile d'appeler un modèle pour confirmer ce qu'une règle certaine a déjà
-tranché — on économise l'appel et on garde un motif auditable.
+The lexical baseline always runs, and runs first: it is free, instantaneous and deterministic.
+If it escalates, there is no point calling a model to confirm what a certain rule has already
+settled — we save the call and keep an auditable rationale.
 
-La relecture sémantique ne s'exécute donc que sur les messages que le socle a laissés passer.
-C'est là qu'elle apporte quelque chose : les engagements formulés sans jamais se nommer.
+The semantic review therefore only runs on messages the baseline let through. That is where it
+adds something: commitments phrased without ever naming themselves.
 """
 
 from __future__ import annotations

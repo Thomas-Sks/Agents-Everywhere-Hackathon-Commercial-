@@ -1,11 +1,11 @@
-"""Adapters de communication en mode simulé.
+"""Communication adapters in simulated mode.
 
-Sélectionnés par le composition root quand le fournisseur correspondant n'est pas configuré.
-Ils implémentent exactement les mêmes ports que les adapters réels : le domaine ne sait pas
-qu'il tourne à vide, et le chemin de code exercé en démo est le même qu'en production.
+Selected by the composition root when the corresponding vendor is not configured. They
+implement exactly the same ports as the real adapters: the domain does not know it is running
+dry, and the code path exercised in a demo is the same one that runs in production.
 
-Chaque envoi simulé est tracé avec un marqueur explicite — une démo ne doit jamais laisser
-croire qu'un message est parti alors qu'il s'est arrêté dans un log.
+Every simulated send is logged with an explicit marker — a demo must never leave anyone
+believing a message went out when it actually stopped inside a log line.
 """
 
 from __future__ import annotations
@@ -45,10 +45,10 @@ class ConsoleVoiceAdapter:
 
 
 class ConsoleHandoffAdapter:
-    """Destination par défaut du passage de relais.
+    """Default destination for a handoff.
 
-    Le brief est journalisé en entier : c'est la garantie qu'un humain reprenant le dossier
-    n'a jamais à redemander le contexte, même sans intégration Slack ou CRM.
+    The brief is logged in full: that is what guarantees a human picking the deal back up never
+    has to ask for the context again, even without a Slack or CRM integration.
     """
 
     def escalate(

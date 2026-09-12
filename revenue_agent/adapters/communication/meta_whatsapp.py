@@ -1,8 +1,7 @@
-"""Adapter WhatsApp — Meta Cloud API.
+"""WhatsApp adapter — Meta Cloud API.
 
-En mode test développeur (gratuit), Meta n'autorise l'envoi que vers un petit nombre de
-numéros préalablement déclarés : un envoi vers un numéro non déclaré est rejeté par l'API,
-pas silencieusement ignoré.
+In developer test mode (free), Meta only allows sending to a small number of pre-declared
+phone numbers: a send to an undeclared number is rejected by the API, not silently ignored.
 """
 
 from __future__ import annotations

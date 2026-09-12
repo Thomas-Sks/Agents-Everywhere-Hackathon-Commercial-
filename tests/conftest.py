@@ -1,13 +1,13 @@
-"""Doubles de test implémentant les ports.
+"""Test doubles implementing the ports.
 
-L'intérêt de l'architecture hexagonale se mesure ici : tout le comportement métier —
-triage, routage par enjeu, résolution de canal, boucle de scan — est exerçable sans HubSpot,
-sans OpenRouter et sans réseau.
+This is where the value of the hexagonal architecture becomes measurable: every piece of
+business behaviour — triage, stakes-based routing, channel resolution, the scan loop — can be
+exercised without HubSpot, without OpenRouter and without a network.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -35,6 +35,7 @@ class FakeCrm:
     interactions: list[tuple[str, Interaction]] = field(default_factory=list)
     updates: list[dict] = field(default_factory=list)
     logged_calls: list[CallOutcome] = field(default_factory=list)
+    stakeholder_updates: list[dict] = field(default_factory=list)
     fail_on_search: bool = False
 
     def find_modified_since(self, since, cursor=None, page_size=100) -> Page:
@@ -71,6 +72,30 @@ class FakeCrm:
                 "next_steps": next_steps,
             }
         )
+
+    def update_stakeholder(
+        self, opportunity_id: str, *, name: str, stance: Stance, role: str = "", notes: str = ""
+    ) -> None:
+        opportunity = self.opportunities.get(opportunity_id)
+        if opportunity is None:
+            raise OpportunityNotFound(opportunity_id)
+
+        self.stakeholder_updates.append(
+            {"opportunity_id": opportunity_id, "name": name, "stance": stance, "role": role}
+        )
+
+        existing = {s.name.casefold(): s for s in opportunity.stakeholders}
+        updated = existing.get(name.casefold())
+        if updated is None:
+            merged = (*opportunity.stakeholders, Stakeholder(name=name, role=role, stance=stance))
+        else:
+            merged = tuple(
+                replace(s, stance=stance, role=role or s.role, notes=notes or s.notes)
+                if s.name.casefold() == name.casefold()
+                else s
+                for s in opportunity.stakeholders
+            )
+        self.opportunities[opportunity_id] = replace(opportunity, stakeholders=merged)
 
     def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
         opportunity = self.opportunities.get(opportunity_id)

@@ -1,13 +1,13 @@
-"""Diffusion du handoff vers plusieurs destinations, avec garantie de remise.
+"""Fanning the handoff out to several destinations, with a delivery guarantee.
 
-Un message au prospect qui échoue peut être réessayé au prochain cycle. **Un handoff perdu est
-un deal abandonné sans que personne ne le sache** — l'agent s'est retiré, et aucun humain n'a
-été prévenu. L'asymétrie justifie un traitement différent :
+A message to the prospect that fails can be retried on the next cycle. **A lost handoff is a
+deal abandoned without anyone knowing** — the agent has stepped back, and no human was warned.
+That asymmetry justifies different handling:
 
-* chaque destination est tentée indépendamment — une panne Teams ne doit pas emporter la
-  tâche HubSpot, qui est la trace durable ;
-* si **toutes** échouent, on journalise en erreur et on déverse le brief intégral dans les
-  logs. C'est un mauvais canal, mais c'est un canal : rien ne doit disparaître silencieusement.
+* each destination is attempted independently — a Teams outage must not take down the HubSpot
+  task, which is the durable trace;
+* if **all** of them fail, we log an error and dump the full brief into the logs. It is a poor
+  channel, but it is a channel: nothing may disappear silently.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ class CompositeHandoffAdapter:
             )
 
     def _fan_out(self, operation: str, call) -> bool:
-        """Tente chaque destination. Retourne True si au moins une a réussi."""
+        """Attempts every destination. Returns True if at least one succeeded."""
         delivered = False
         for destination in self._destinations:
             try:

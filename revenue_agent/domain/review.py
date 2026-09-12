@@ -1,12 +1,12 @@
-"""Relecture d'un message sortant — le regard d'un directeur commercial avant envoi.
+"""Review of an outbound message — a sales director's eye before it goes out.
 
-La détection lexicale attrape ce qui se nomme (« remise », « -20 % »). Elle ne voit pas ce qui
-se formule : « je m'aligne sur leur tarif », « on trouvera un terrain d'entente sur le budget »,
-« je vous garantis un retour sur investissement en six mois ». Ces phrases engagent l'entreprise
-autant qu'une remise annoncée, et aucun dictionnaire ne les couvrira toutes.
+Lexical detection catches what names itself ("discount", "-20%"). It does not see what merely
+phrases itself: "I'll match their price", "we'll find common ground on the budget", "I guarantee
+you a return on investment within six months". Those sentences commit the company just as much
+as an announced discount, and no dictionary will ever cover them all.
 
-D'où cette relecture sémantique. Elle ne remplace pas les règles déterministes : elle s'y
-ajoute. Un jugement de modèle peut se tromper ou être indisponible ; une règle lexicale, non.
+Hence this semantic review. It does not replace the deterministic rules: it adds to them. A
+model's judgement can be wrong or unavailable; a lexical rule cannot.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from enum import StrEnum
 
 
 class ReviewCategory(StrEnum):
-    """Motifs d'escalade, tels qu'un directeur commercial les formulerait."""
+    """Grounds for escalation, as a sales director would phrase them."""
 
     NONE = "aucun"
     PRICE_COMMITMENT = "engagement_prix"
@@ -31,11 +31,11 @@ class ReviewCategory(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ReviewFinding:
-    """Verdict de la relecture.
+    """The review's verdict.
 
-    `quote` porte la phrase exacte qui pose problème : un directeur commercial ne dit pas
-    « ce message m'ennuie », il pointe la ligne. C'est aussi ce qui rend la file de validation
-    exploitable en quelques secondes.
+    `quote` carries the exact sentence that is problematic: a sales director does not say "this
+    message bothers me", they point at the line. It is also what makes the approval queue
+    actionable in a matter of seconds.
     """
 
     requires_human: bool
@@ -69,10 +69,11 @@ class ReviewFinding:
 
 @dataclass(frozen=True, slots=True)
 class MessageUnderReview:
-    """Ce qu'on soumet au relecteur : le message, et le contexte qui permet d'en juger.
+    """What we submit to the reviewer: the message, and the context needed to judge it.
 
-    Sans le contexte, la même phrase est anodine ou grave : « on peut s'arranger sur le prix »
-    en fin de négociation avec un décideur engagé n'est pas la même chose qu'au premier contact.
+    Without the context, the same sentence is either harmless or serious: "we can work something
+    out on price" at the end of a negotiation with an engaged decision maker is not the same
+    thing as on first contact.
     """
 
     channel: str
