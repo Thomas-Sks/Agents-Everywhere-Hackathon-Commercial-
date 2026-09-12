@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Caches d'outils
+.pytest_cache/
+.ruff_cache/
+
+# Secrets — seul .env.example est versionné
+.env
+
+# État d'exécution : CRM local, catalogue, pointeur de scan, file de validation
+var/
+
+# Node (Trigger.dev)
+node_modules/
+.trigger/

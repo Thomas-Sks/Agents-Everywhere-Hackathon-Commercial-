@@ -1,0 +1,351 @@
+"""Adapter primaire HTTP — expose les use cases au monde extérieur.
+
+Trois familles d'appelants :
+
+* **Trigger.dev** appelle `POST /scan` sur une cadence cron. C'est le battement de cœur qui
+  rend l'agent autonome.
+* **Retell** appelle `POST /retell/tool-call` pendant un appel (l'agent vocal exécute une
+  action) et `POST /retell/webhook` à la fin (`call_analyzed` porte le résumé et le sentiment).
+* **Meta** appelle `POST /whatsapp/inbound` quand le prospect répond.
+
+Aucune logique métier ici : validation, authentification, traduction du transport vers les use
+cases, et retour. C'est la définition même d'un adapter.
+"""
+
+from __future__ import annotations
+
+import hmac
+import logging
+from contextlib import asynccontextmanager
+from datetime import UTC
+from typing import Any
+
+from fastapi import BackgroundTasks, FastAPI, Header, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
+
+from revenue_agent.adapters.communication.retell_voice import verify_signature
+from revenue_agent.config import Settings
+from revenue_agent.container import Container, build_container
+from revenue_agent.domain.errors import RevenueAgentError
+from revenue_agent.domain.models import CallOutcome
+from revenue_agent.logging_setup import configure_logging
+
+logger = logging.getLogger(__name__)
+
+_container: Container | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _container
+    settings = Settings.from_env()
+    configure_logging(settings.log_level)
+    _container = build_container(settings)
+    logger.info("Autonomous Revenue Agent démarré pour %s", settings.company_name)
+    yield
+    _container = None
+
+
+app = FastAPI(title="Autonomous Revenue Agent", version="1.0.0", lifespan=lifespan)
+
+
+def container() -> Container:
+    if _container is None:  # pragma: no cover - garde-fou de démarrage
+        raise RuntimeError("Container non initialisé")
+    return _container
+
+
+# -- Santé -------------------------------------------------------------------------
+
+
+@app.get("/health")
+async def health() -> dict:
+    current = container()
+    settings = current.settings
+    return {
+        "status": "ok",
+        "entreprise": settings.company_name,
+        "mode_autonomie": settings.policy.mode.value,
+        "seuil_autonomie_eur": settings.policy.max_autonomous_amount,
+        "actions_en_attente": len(current.review_approval.list_pending()),
+        "composants_simules": settings.degraded_components(),
+    }
+
+
+# -- Validation humaine ------------------------------------------------------------
+
+
+@app.get("/approvals")
+async def list_approvals() -> JSONResponse:
+    """Actions retenues par la politique, en attente d'arbitrage humain.
+
+    Tant qu'une action figure ici, rien n'est parti chez le prospect.
+    """
+    pending = container().review_approval.list_pending()
+    return JSONResponse(
+        [
+            {
+                "id": approval.id,
+                "opportunite": approval.opportunity_id,
+                "entreprise": approval.company,
+                "canal": approval.kind.value,
+                "destinataire": approval.recipient,
+                "regle": approval.rule,
+                "motif": approval.reason,
+                "demandee_le": approval.requested_at.isoformat(),
+                "contenu": approval.payload,
+            }
+            for approval in pending
+        ]
+    )
+
+
+@app.post("/approvals/{approval_id}/approve")
+async def approve(approval_id: str, request: Request) -> JSONResponse:
+    body = _safe_json(await request.body())
+    result = container().review_approval.approve(
+        approval_id, body.get("reviewer", "api"), body.get("note", "")
+    )
+    return JSONResponse({"resultat": result})
+
+
+@app.post("/approvals/{approval_id}/reject")
+async def reject(approval_id: str, request: Request) -> JSONResponse:
+    body = _safe_json(await request.body())
+    result = container().review_approval.reject(
+        approval_id, body.get("reviewer", "api"), body.get("note", "")
+    )
+    return JSONResponse({"resultat": result})
+
+
+# -- Scan périodique ---------------------------------------------------------------
+
+
+@app.post("/scan")
+async def scan(x_scan_token: str | None = Header(default=None)) -> JSONResponse:
+    """Déclenché par Trigger.dev. Protégé par un secret partagé : cet endpoint consomme des
+    tokens LLM, il ne doit pas être ouvert sur l'internet public."""
+    current = container()
+    expected = current.settings.scan.shared_secret
+
+    if expected and not (x_scan_token and hmac.compare_digest(x_scan_token, expected)):
+        return JSONResponse({"detail": "Jeton de scan invalide"}, status_code=401)
+    if not expected:
+        logger.warning("SCAN_SHARED_SECRET non configuré — endpoint /scan non protégé")
+
+    report = current.scan_for_leads.execute()
+    logger.info(
+        "Scan terminé : %s deal(s) examiné(s), %s détecté(s), %s traité(s)",
+        report.scanned_deals,
+        report.detected,
+        len(report.processed),
+    )
+    return JSONResponse(report.as_dict())
+
+
+# -- Retell ------------------------------------------------------------------------
+
+
+@app.post("/retell/tool-call")
+async def retell_tool_call(
+    request: Request, x_retell_signature: str | None = Header(default=None)
+) -> JSONResponse:
+    """Exécute une action demandée par l'agent vocal pendant un appel.
+
+    Format vérifié de Retell : `{name, args, call}`. La réponse JSON `{result}` permet à Retell
+    d'en faire une « response variable » exploitable dans la suite de la conversation.
+    """
+    current = container()
+    raw_body = await request.body()
+
+    if not _retell_signature_ok(current, raw_body, x_retell_signature):
+        return JSONResponse({"detail": "Signature invalide"}, status_code=401)
+
+    payload = _safe_json(raw_body)
+    name = payload.get("name") or payload.get("function_name")
+    args = payload.get("args") or payload.get("arguments") or {}
+
+    action = _RETELL_ACTIONS.get(name)
+    if action is None:
+        logger.warning("Tool inconnu demandé par Retell : %s", name)
+        return JSONResponse({"result": f"Action inconnue : {name}"}, status_code=404)
+
+    try:
+        result = action(current, args)
+    except RevenueAgentError as exc:
+        logger.warning("Action %s en échec pendant un appel : %s", name, exc)
+        return JSONResponse({"result": f"ERREUR : {exc}"})
+
+    return JSONResponse({"result": result})
+
+
+@app.post("/retell/webhook")
+async def retell_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_retell_signature: str | None = Header(default=None),
+) -> JSONResponse:
+    """Événements d'appel. Seul `call_analyzed` porte le résumé et le sentiment — c'est donc
+    celui-là qui alimente le moteur de décision, pas `call_ended`."""
+    current = container()
+    raw_body = await request.body()
+
+    if not _retell_signature_ok(current, raw_body, x_retell_signature):
+        return JSONResponse({"detail": "Signature invalide"}, status_code=401)
+
+    payload = _safe_json(raw_body)
+    event = payload.get("event")
+    if event != "call_analyzed":
+        return JSONResponse({"status": "ignoré", "event": event})
+
+    call = payload.get("call", {})
+    opportunity_id = (call.get("metadata") or {}).get("opportunity_id")
+    if not opportunity_id:
+        logger.warning("Appel Retell sans opportunity_id dans metadata — ignoré")
+        return JSONResponse({"status": "ignoré", "raison": "opportunity_id absent"})
+
+    analysis = call.get("call_analysis") or {}
+    outcome = CallOutcome(
+        opportunity_id=opportunity_id,
+        transcript=call.get("transcript") or "",
+        summary=analysis.get("call_summary") or "",
+        sentiment=analysis.get("user_sentiment") or "",
+        duration_seconds=int((call.get("duration_ms") or 0) / 1000),
+        successful=bool(analysis.get("call_successful", True)),
+    )
+
+    # Traitement en tâche de fond : le cycle de décision peut durer plusieurs secondes, et
+    # Retell attend un accusé de réception rapide.
+    background_tasks.add_task(current.handle_call_outcome.execute, outcome)
+    return JSONResponse({"status": "accepté", "opportunite": opportunity_id})
+
+
+# -- WhatsApp ----------------------------------------------------------------------
+
+
+@app.get("/whatsapp/inbound")
+async def whatsapp_verify(request: Request) -> Response:
+    """Handshake de vérification exigé par Meta à la configuration du webhook."""
+    params = request.query_params
+    expected = container().settings.whatsapp.verify_token
+    provided = params.get("hub.verify_token")
+
+    if expected and provided and hmac.compare_digest(provided, expected):
+        return PlainTextResponse(params.get("hub.challenge", ""))
+    return JSONResponse({"detail": "Jeton de vérification invalide"}, status_code=403)
+
+
+@app.post("/whatsapp/inbound")
+async def whatsapp_inbound(request: Request, background_tasks: BackgroundTasks) -> JSONResponse:
+    """Un message entrant relance un cycle de décision complet."""
+    current = container()
+    payload = _safe_json(await request.body())
+
+    message = _extract_whatsapp_message(payload)
+    if message is None:
+        return JSONResponse({"status": "ignoré"})
+
+    phone, text = message
+    opportunity_id = _resolve_opportunity_by_phone(current, phone)
+    if opportunity_id is None:
+        logger.warning("Message WhatsApp de %s — aucune opportunité correspondante", phone)
+        return JSONResponse({"status": "ignoré", "raison": "prospect inconnu"})
+
+    background_tasks.add_task(
+        current.decision_cycle.execute_safely,
+        opportunity_id,
+        f"Message WhatsApp reçu du prospect : « {text} »",
+    )
+    return JSONResponse({"status": "accepté", "opportunite": opportunity_id})
+
+
+# -- Helpers -----------------------------------------------------------------------
+
+
+_RETELL_ACTIONS: dict[str, Any] = {
+    "get_opportunity_context": lambda c, a: c.actions.get_opportunity_context(
+        a["opportunity_id"]
+    ),
+    "get_product_info": lambda c, a: c.actions.get_product_info(a.get("product_id", "")),
+    "research_prospect": lambda c, a: c.actions.research_prospect(a["company_name"]),
+    "record_interaction": lambda c, a: c.actions.record_interaction(
+        a["opportunity_id"], a.get("channel", "voice"), a["summary"]
+    ),
+    "update_opportunity": lambda c, a: c.actions.update_opportunity(
+        a["opportunity_id"],
+        stage=a.get("stage", ""),
+        probability=int(a.get("probability", -1)),
+        objection=a.get("objection", ""),
+        objection_root_cause=a.get("objection_root_cause", ""),
+        next_steps=a.get("next_steps", ""),
+    ),
+    "send_email": lambda c, a: c.actions.send_email(
+        a["opportunity_id"], a["subject"], a["body"]
+    ),
+    "schedule_follow_up": lambda c, a: c.actions.schedule_follow_up(
+        a["opportunity_id"], a.get("reason", ""), a["due_date"]
+    ),
+    "escalate_to_human": lambda c, a: c.actions.escalate_to_human(
+        a["opportunity_id"],
+        a.get("reason", ""),
+        a.get("urgency", "normale"),
+        a.get("context_brief", ""),
+    ),
+}
+
+
+def _retell_signature_ok(current: Container, body: bytes, signature: str | None) -> bool:
+    secret = current.settings.retell.webhook_secret
+    if not secret:
+        logger.warning("RETELL_WEBHOOK_SECRET non configuré — signature non vérifiée")
+        return True
+    return verify_signature(payload=body, signature=signature, secret=secret)
+
+
+def _safe_json(body: bytes) -> dict:
+    import json
+
+    try:
+        payload = json.loads(body or b"{}")
+    except ValueError:
+        logger.warning("Payload non-JSON reçu")
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _extract_whatsapp_message(payload: dict) -> tuple[str, str] | None:
+    try:
+        value = payload["entry"][0]["changes"][0]["value"]
+        message = value["messages"][0]
+        return message["from"], message["text"]["body"]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _resolve_opportunity_by_phone(current: Container, phone: str) -> str | None:
+    """Retrouve l'opportunité à partir du numéro émetteur.
+
+    Meta renvoie le numéro sans `+` ; la comparaison se fait donc sur les chiffres seuls.
+    """
+    digits = "".join(character for character in phone if character.isdigit())
+    from datetime import datetime, timedelta
+
+    since = datetime.now(UTC) - timedelta(days=365)
+    try:
+        page = current.crm.find_modified_since(since, page_size=100)
+    except RevenueAgentError:
+        logger.exception("Impossible d'interroger le CRM pour résoudre %s", phone)
+        return None
+
+    for snapshot in page.items:
+        try:
+            opportunity = current.crm.load_opportunity(snapshot.id)
+        except RevenueAgentError:
+            continue
+        for stakeholder in opportunity.stakeholders:
+            if not stakeholder.phone:
+                continue
+            candidate = "".join(c for c in stakeholder.phone if c.isdigit())
+            if candidate and candidate.endswith(digits[-9:]):
+                return opportunity.id
+    return None
