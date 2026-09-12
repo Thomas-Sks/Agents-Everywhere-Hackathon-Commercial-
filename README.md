@@ -41,8 +41,8 @@ Trigger.dev (cron, 5 min) ──> POST /scan
   ├─ 4. The decision engine reads the full file and understands the silence
   │      is not disinterest: a June objection said "we can't switch before
   │      our current contract ends"
-  ├─ 5. It notes the budget holder was never engaged, looks up recent news
-  │      about Acme (Exa), and drafts
+  ├─ 5. It notes the budget holder was never engaged — and writes that onto
+  │      the stakeholder map — looks up recent news about Acme (Exa), and drafts
   ├─ 6. Policy + pre-send review → approval queue or direct send
   └─ 7. Written trace in HubSpot: what isn't written there didn't happen
 ```
@@ -71,6 +71,32 @@ voice agent looks up a product sheet or records an objection, it calls — over 
 diverge: one codebase, two modalities. The call ends, `call_analyzed` returns the transcript, and
 a fresh decision cycle starts from what was actually said.
 
+## What the agent knows about selling
+
+Guardrails and architecture are what make it safe. This is what makes it a *sales* agent rather
+than a scheduler that sends templates.
+
+**An objection has a lifecycle, not just an existence.** When the agent detects one, it records
+the wording *and the cause it suspects* — "too expensive" can mean no budget, misunderstood
+value, the wrong contact, or simply a wish to end the conversation, and those lead to opposite
+next moves. When the objection is lifted, the agent closes it with `resolve_objection`. That
+second half is not bookkeeping: an objection left open forever keeps reading as an active
+blocker, pollutes every later cycle, and — since stakes routing keys off open objections — pins
+the deal on the expensive model for good.
+
+**The map of who decides is written, not just read.** A complex sale rarely fails on the product.
+The agent maintains who champions, who funds, who decides, who blocks, with `update_stakeholder`
+— **including people it has never contacted**. The CFO who signs off the budget belongs on the
+map even without an email address; leaving them off is exactly what makes a deal look healthy
+right up until it dies. A stance observed but not written down is lost by the next cycle.
+
+**A price is never quoted from memory.** Every figure goes through `get_product_info`, and the
+policy blocks any amount absent from the catalogue before it can leave. Asking the model to check
+is not the same as guaranteeing it.
+
+**Waiting is a first-class action.** `schedule_follow_up` is a decision with a reason and a date,
+not an absence of one — and the periodic scan is what makes that promise real months later.
+
 ## The environment shapes the code
 
 These are not integration details: each of these constraints changed a design decision. That is
@@ -85,8 +111,9 @@ what separates an agent *inside* an environment from an agent *next to* one.
 | On day 1, the CRM already holds 500 deals | The first scan is an *inventory*, not a delta: we adopt the book of business without pestering active deals, while dormant ones become eligible immediately |
 | `retell_llm_dynamic_variables` only accepts strings | The opportunity context is explicitly flattened before the call |
 | It's `call_analyzed`, not `call_ended`, that carries the summary | That is the event feeding the post-call decision |
-| Meta returns the number without a `+` | Inbound prospect resolution works on digits alone |
+| Meta returns the number without a `+`, CRMs store it half a dozen ways | Inbound resolution queries the CRM's index across plausible spellings rather than matching on trailing digits, which would attribute a message to the wrong prospect |
 | A CRM activity spike must not blow up the bill | A per-scan decision cap, with the surplus deferred to the next tick — never lost |
+| HubSpot has no standard field for "who blocks this deal" | The stakeholder map is written as prefixed notes — readable by the rep, re-parsable by the agent, nothing to configure in the customer's portal |
 
 ## Operator control
 
@@ -282,6 +309,7 @@ ngrok http 8000     # so Trigger.dev and Retell can reach us
 | `POST /retell/tool-call` | Retell, mid-call | The voice agent runs an action from the registry |
 | `POST /retell/webhook` | Retell, call end | `call_analyzed` → transcript and summary fed back into the decision |
 | `POST /whatsapp/inbound` | Meta | An inbound message restarts a full decision cycle |
+| `GET /whatsapp/inbound` | Meta | Verification handshake, required to register the webhook |
 | `GET /approvals/ui?token=` | operator | **Arbitration page**: exact message and two buttons |
 | `GET /approvals?token=` | operator | The same actions as JSON |
 | `POST /approvals/{id}/approve` · `/reject` | operator | Arbitration |
@@ -325,6 +353,23 @@ Three concrete benefits:
 - **Tests run without a network.** That is the objective measure of the decoupling.
 - **Swapping a provider is one file.** HubSpot → Salesforce, Retell → Vapi: one adapter, zero
   impact on the domain.
+
+### What the agent can do
+
+Twelve tools, defined once in `application/action_registry.py` and exposed two ways: as LangGraph
+tools to the written engine, and over a webhook to the voice agent mid-call. One implementation,
+two modalities — not two copies doomed to diverge.
+
+| Understand | Record | Act |
+|---|---|---|
+| `get_opportunity_context` | `record_interaction` | `send_email` |
+| `get_product_info` | `update_opportunity` | `send_whatsapp_message` |
+| `research_prospect` | `update_stakeholder` | `place_phone_call` |
+| | `resolve_objection` | `schedule_follow_up` |
+| | | `escalate_to_human` |
+
+Every acting tool resolves its own recipient from the CRM — the model never supplies an address
+or a phone number — and passes through the policy before anything leaves.
 
 ## Stack
 
