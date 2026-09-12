@@ -38,7 +38,7 @@ class StubReviewer:
 
 
 def test_the_baseline_catches_what_names_itself():
-    finding = LexicalMessageReviewer().review(message("Je vous propose une remise de 15 %."))
+    finding = LexicalMessageReviewer().review(message("I can offer you a 15% discount."))
 
     assert finding.requires_human is True
     assert finding.category is ReviewCategory.PRICE_COMMITMENT
@@ -46,16 +46,16 @@ def test_the_baseline_catches_what_names_itself():
 
 def test_the_baseline_quotes_the_offending_sentence():
     """A reviewer points at the line, they do not merely say "this message bothers me"."""
-    content = "Bonjour Julie. Je peux vous faire une remise. À bientôt."
+    content = "Hello Julie. I can give you a discount. Talk soon."
 
     finding = LexicalMessageReviewer().review(message(content))
 
-    assert "remise" in finding.quote
+    assert "discount" in finding.quote
     assert finding.quote != content, "we quote the sentence, not the whole message"
 
 
 def test_the_baseline_lets_an_innocuous_message_through():
-    finding = LexicalMessageReviewer().review(message("Seriez-vous disponible mardi à 14 h ?"))
+    finding = LexicalMessageReviewer().review(message("Would you be available on Tuesday at 2pm?"))
 
     assert finding.requires_human is False
 
@@ -68,7 +68,7 @@ def test_the_semantic_layer_is_not_called_when_the_baseline_already_ruled():
     semantic = StubReviewer(ReviewFinding.clear())
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=semantic)
 
-    finding = reviewer.review(message("Une remise est envisageable."))
+    finding = reviewer.review(message("A discount is possible."))
 
     assert finding.requires_human is True
     assert semantic.calls == []
@@ -79,13 +79,13 @@ def test_the_semantic_layer_catches_what_the_baseline_cannot_see():
     semantic = StubReviewer(
         ReviewFinding.escalate(
             ReviewCategory.PRICE_COMMITMENT,
-            "Le message laisse entendre que le prix est négociable.",
-            quote="je m'aligne sur leur tarif",
+            "The message implies the price is negotiable.",
+            quote="I will match their price",
         )
     )
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=semantic)
 
-    finding = reviewer.review(message("Sur le budget, je m'aligne sur leur tarif."))
+    finding = reviewer.review(message("On budget, I will match their price."))
 
     assert finding.requires_human is True
     assert finding.category is ReviewCategory.PRICE_COMMITMENT
@@ -95,7 +95,7 @@ def test_the_semantic_layer_catches_what_the_baseline_cannot_see():
 def test_without_a_semantic_reviewer_the_baseline_has_the_final_say():
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=None)
 
-    assert reviewer.review(message("Bonjour, disponible jeudi ?")).requires_human is False
+    assert reviewer.review(message("Hello, are you free on Thursday?")).requires_human is False
 
 
 def test_a_message_cleared_by_both_layers_goes_through():
@@ -103,7 +103,7 @@ def test_a_message_cleared_by_both_layers_goes_through():
         lexical=LexicalMessageReviewer(), semantic=StubReviewer(ReviewFinding.clear())
     )
 
-    assert reviewer.review(message("Je vous envoie l'étude de cas.")).requires_human is False
+    assert reviewer.review(message("I am sending you the case study.")).requires_human is False
 
 
 # -- Fail closed --------------------------------------------------------------------
@@ -115,7 +115,7 @@ def test_a_reviewer_that_is_down_holds_the_message():
     class BrokenReviewer:
         def review(self, msg):
             return ReviewFinding.escalate(
-                ReviewCategory.NONE, "La relecture n'a pas pu s'exécuter.", source="llm"
+                ReviewCategory.NONE, "The review could not run.", source="llm"
             )
 
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=BrokenReviewer())
@@ -128,7 +128,7 @@ def test_the_context_is_passed_to_the_reviewer():
     semantic = StubReviewer(ReviewFinding.clear())
     reviewer = LayeredMessageReviewer(lexical=LexicalMessageReviewer(), semantic=semantic)
 
-    reviewer.review(message("Bonjour."))
+    reviewer.review(message("Hello."))
 
     transmitted = semantic.calls[0]
     assert transmitted.stage == "qualification"
@@ -174,4 +174,4 @@ def test_an_unknown_category_does_not_crash():
 
     assert _parse_category("catégorie_inventée_par_le_modèle") is ReviewCategory.NONE
     assert _parse_category(None) is ReviewCategory.NONE
-    assert _parse_category("engagement_prix") is ReviewCategory.PRICE_COMMITMENT
+    assert _parse_category("price_commitment") is ReviewCategory.PRICE_COMMITMENT

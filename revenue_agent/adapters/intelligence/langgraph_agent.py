@@ -206,7 +206,7 @@ class LangGraphDecisionAgent:
             Args:
                 opportunity_id: Identifiant de l'opportunité.
                 name: Nom de la personne, tel qu'il apparaît dans le CRM si elle y figure.
-                stance: "champion", "decideur", "opposant", "neutre" ou "inconnu".
+                stance: "champion", "decision_maker", "blocker", "neutral" ou "inconnu".
                 role: Fonction dans l'entreprise, si connue.
                 notes: Ce qui justifie cette posture, en une phrase.
             """
@@ -288,12 +288,12 @@ class LangGraphDecisionAgent:
 
             context_brief must contain: who the contact is, their real problem, the root cause
             of their objections, who else decides, what was asked for, and what remains to be
-            handled at the next exchange. Never "call Jean, he's interested".
+            handled at the next exchange. Never "call John, he's interested".
 
             Args:
                 opportunity_id: Identifier of the opportunity.
                 reason: Why the situation exceeds the agent's autonomy limits.
-                urgency: "faible", "normale" or "haute" (these exact values are mapped to
+                urgency: "low", "normal" or "high" (these exact values are mapped to
                     HubSpot task priorities).
                 context_brief: Full, structured brief for the human sales rep.
             """

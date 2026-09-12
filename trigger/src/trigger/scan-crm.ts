@@ -25,17 +25,17 @@ const API_BASE_URL = process.env.REVENUE_AGENT_API_URL ?? "http://localhost:8000
 const SCAN_SHARED_SECRET = process.env.SCAN_SHARED_SECRET ?? "";
 
 type ScanReport = {
-  deals_scannes: number;
-  opportunites_detectees: number;
-  opportunites_traitees: Array<{
-    opportunite: string;
-    declencheur: string;
-    raison: string;
-    routage: string;
+  deals_scanned: number;
+  opportunities_detected: number;
+  opportunities_processed: Array<{
+    opportunity: string;
+    trigger: string;
+    reason: string;
+    routing: string;
     decision: string;
   }>;
-  reportees_au_prochain_scan: number;
-  crm_disponible: boolean;
+  deferred_to_next_scan: number;
+  crm_available: boolean;
 };
 
 async function runScan(): Promise<ScanReport> {
@@ -50,7 +50,7 @@ async function runScan(): Promise<ScanReport> {
   if (!response.ok) {
     // We throw: Trigger.dev then applies its retry policy, rather than silently marking a
     // failed scan as successful.
-    throw new Error(`Scan refusé par l'API (${response.status}) : ${await response.text()}`);
+    throw new Error(`Scan rejected by the API (${response.status}): ${await response.text()}`);
   }
 
   return (await response.json()) as ScanReport;
@@ -64,23 +64,23 @@ export const scanCrm = schedules.task({
   run: async () => {
     const report = await runScan();
 
-    logger.info("Scan du CRM terminé", {
-      dealsScannes: report.deals_scannes,
-      detectees: report.opportunites_detectees,
-      traitees: report.opportunites_traitees.length,
-      reportees: report.reportees_au_prochain_scan,
+    logger.info("CRM scan complete", {
+      dealsScanned: report.deals_scanned,
+      detected: report.opportunities_detected,
+      processed: report.opportunities_processed.length,
+      deferred: report.deferred_to_next_scan,
     });
 
-    if (!report.crm_disponible) {
+    if (!report.crm_available) {
       // The pointer did not advance on the Python side: the window will be replayed on the
       // next tick.
-      logger.warn("CRM indisponible pendant ce scan — fenêtre non consommée");
+      logger.warn("CRM unavailable during this scan — window not consumed");
     }
 
-    for (const item of report.opportunites_traitees) {
-      logger.info(`Décision sur ${item.opportunite}`, {
-        declencheur: item.declencheur,
-        routage: item.routage,
+    for (const item of report.opportunities_processed) {
+      logger.info(`Decision on ${item.opportunity}`, {
+        trigger: item.trigger,
+        routing: item.routing,
         decision: item.decision,
       });
     }
@@ -92,15 +92,15 @@ export const scanCrm = schedules.task({
 export const scheduleFollowUp = task({
   id: "schedule-follow-up",
   run: async (payload: { opportunityId: string; delaySeconds: number }) => {
-    logger.info(`Relance programmée pour ${payload.opportunityId}`, payload);
+    logger.info(`Follow-up scheduled for ${payload.opportunityId}`, payload);
 
     // Durable waitpoint: the task is suspended and its resources released. It resumes
     // exactly here, even weeks later, with no process kept alive.
     await wait.for({ seconds: payload.delaySeconds });
 
     const report = await runScan();
-    logger.info(`Reprise de ${payload.opportunityId} après attente`, {
-      traitees: report.opportunites_traitees.length,
+    logger.info(`Resuming ${payload.opportunityId} after wait`, {
+      processed: report.opportunities_processed.length,
     });
     return report;
   },

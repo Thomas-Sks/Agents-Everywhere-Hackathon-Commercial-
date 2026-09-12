@@ -39,7 +39,7 @@ class EnrichmentError(AdapterError):
 
 class OpportunityNotFound(RevenueAgentError):
     def __init__(self, opportunity_id: str) -> None:
-        super().__init__(f"Opportunité introuvable : {opportunity_id}")
+        super().__init__(f"Opportunity not found: {opportunity_id}")
         self.opportunity_id = opportunity_id
 
 
@@ -48,8 +48,8 @@ class ChannelUnavailable(RevenueAgentError):
 
     def __init__(self, opportunity_id: str, channel: str) -> None:
         super().__init__(
-            f"Canal '{channel}' indisponible pour l'opportunité {opportunity_id} "
-            "(coordonnée absente du CRM)"
+            f"Channel '{channel}' unavailable for opportunity {opportunity_id} "
+            "(contact details missing from the CRM)"
         )
         self.opportunity_id = opportunity_id
         self.channel = channel
@@ -59,6 +59,6 @@ class AuthorizationRequired(RevenueAgentError):
     """The action exceeds the agent's autonomy limits."""
 
     def __init__(self, action: str, reason: str) -> None:
-        super().__init__(f"Action '{action}' refusée : {reason}")
+        super().__init__(f"Action '{action}' refused: {reason}")
         self.action = action
         self.reason = reason

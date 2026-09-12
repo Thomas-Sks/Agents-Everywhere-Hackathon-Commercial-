@@ -21,14 +21,14 @@ logger = logging.getLogger(__name__)
 class ConsoleEmailAdapter:
     def send(self, *, to: str, subject: str, body: str) -> str:
         message_id = f"simulated-{uuid.uuid4().hex[:12]}"
-        logger.info("[SIMULÉ] Email → %s | %s\n%s", to, subject, body)
+        logger.info("[SIMULATED] Email → %s | %s\n%s", to, subject, body)
         return message_id
 
 
 class ConsoleWhatsAppAdapter:
     def send(self, *, to_phone_number: str, message: str) -> str:
         message_id = f"simulated-{uuid.uuid4().hex[:12]}"
-        logger.info("[SIMULÉ] WhatsApp → %s\n%s", to_phone_number, message)
+        logger.info("[SIMULATED] WhatsApp → %s\n%s", to_phone_number, message)
         return message_id
 
 
@@ -36,7 +36,7 @@ class ConsoleVoiceAdapter:
     def place_call(self, *, to_phone_number: str, opportunity: Opportunity, objective: str) -> str:
         call_id = f"simulated-{uuid.uuid4().hex[:12]}"
         logger.info(
-            "[SIMULÉ] Appel → %s (opportunité %s) | objectif : %s",
+            "[SIMULATED] Call → %s (opportunity %s) | objective: %s",
             to_phone_number,
             opportunity.id,
             objective,
@@ -55,7 +55,7 @@ class ConsoleHandoffAdapter:
         self, *, opportunity: Opportunity, reason: str, urgency: str, context_brief: str
     ) -> None:
         logger.warning(
-            "HANDOFF [%s] — opportunité %s (%s)\nRaison : %s\n\n%s",
+            "HANDOFF [%s] — opportunity %s (%s)\nReason: %s\n\n%s",
             urgency.upper(),
             opportunity.id,
             opportunity.company,
@@ -67,7 +67,7 @@ class ConsoleHandoffAdapter:
         self, *, opportunity, approval_id: str, channel: str, reason: str, preview: str
     ) -> None:
         logger.warning(
-            "VALIDATION REQUISE [%s] — opportunité %s (%s)\nMotif : %s\n\n%s",
+            "APPROVAL REQUIRED [%s] — opportunity %s (%s)\nReason: %s\n\n%s",
             approval_id,
             opportunity.id,
             opportunity.company,

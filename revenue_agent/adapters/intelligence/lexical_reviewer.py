@@ -17,32 +17,37 @@ from revenue_agent.domain.review import MessageUnderReview, ReviewCategory, Revi
 SOURCE = "lexical"
 
 _PATTERNS: tuple[tuple[str, ReviewCategory, str], ...] = (
-    (r"\bremise\b", ReviewCategory.PRICE_COMMITMENT, "Le message annonce une remise."),
-    (r"\brabais\b", ReviewCategory.PRICE_COMMITMENT, "Le message annonce un rabais."),
-    (r"\bréduction\b", ReviewCategory.PRICE_COMMITMENT, "Le message annonce une réduction."),
-    (r"\bdiscount\b", ReviewCategory.PRICE_COMMITMENT, "Le message annonce une réduction."),
+    (r"\bdiscount(s|ed|ing)?\b", ReviewCategory.PRICE_COMMITMENT, "The message offers a discount."),
+    (r"\brebate\b", ReviewCategory.PRICE_COMMITMENT, "The message offers a rebate."),
+    (r"\bmark(ed)?\s*down\b", ReviewCategory.PRICE_COMMITMENT, "The message marks the price down."),
+    (r"\bwaive[ds]?\b", ReviewCategory.PRICE_COMMITMENT, "The message waives a charge."),
     (
-        r"\bgeste commercial\b",
+        r"\bfree\s+of\s+charge\b",
         ReviewCategory.PRICE_COMMITMENT,
-        "Le message promet un geste commercial.",
+        "The message promises something free of charge.",
+    ),
+    (r"\bat\s+no\s+cost\b", ReviewCategory.PRICE_COMMITMENT, "The message promises something at no cost."),
+    (
+        r"\bon\s+the\s+house\b",
+        ReviewCategory.PRICE_COMMITMENT,
+        "The message offers something on the house.",
     ),
     (
-        r"\bprix préférentiel\b",
+        r"\bspecial\s+(offer|price|rate)\b",
         ReviewCategory.PRICE_COMMITMENT,
-        "Le message annonce un prix préférentiel.",
+        "The message announces a special price.",
     ),
     (
-        r"\boffre spéciale\b",
+        r"\bpreferential\s+(price|rate|terms)\b",
         ReviewCategory.PRICE_COMMITMENT,
-        "Le message annonce une offre spéciale.",
+        "The message announces preferential terms.",
     ),
-    (r"\bgratuit(e|s)?\b", ReviewCategory.PRICE_COMMITMENT, "Le message promet une gratuité."),
     (
-        r"\bofferte?s?\b",
+        r"\bcomplimentary\b",
         ReviewCategory.PRICE_COMMITMENT,
-        "Le message promet une prestation offerte.",
+        "The message promises a complimentary item.",
     ),
-    (r"\d+\s*%", ReviewCategory.PRICE_COMMITMENT, "Le message contient un pourcentage."),
+    (r"\d+\s*%", ReviewCategory.PRICE_COMMITMENT, "The message contains a percentage."),
 )
 
 

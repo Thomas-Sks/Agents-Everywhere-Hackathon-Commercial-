@@ -18,10 +18,10 @@ from revenue_agent.domain.models import DealSnapshot
 
 
 class TriggerKind(StrEnum):
-    STAGE_CHANGED = "changement_de_stade"
-    NEW_LEAD = "nouveau_lead"
-    SCHEDULED_FOLLOW_UP = "relance_programmee"
-    INACTIVITY = "inactivite"
+    STAGE_CHANGED = "stage_changed"
+    NEW_LEAD = "new_lead"
+    SCHEDULED_FOLLOW_UP = "scheduled_follow_up"
+    INACTIVITY = "inactivity"
 
 
 # A single deal can satisfy several rules on the same tick. The ordering below settles it:
@@ -89,8 +89,8 @@ def _from_snapshots(
                     opportunity_id=snapshot.id,
                     kind=TriggerKind.NEW_LEAD,
                     reason=(
-                        f"Nouveau lead détecté dans le CRM : « {snapshot.name} », "
-                        f"au stade « {snapshot.stage} »."
+                        f"New lead detected in the CRM: \"{snapshot.name}\", "
+                        f"at stage \"{snapshot.stage}\"."
                     ),
                     detected_at=now,
                 )
@@ -103,8 +103,8 @@ def _from_snapshots(
                     opportunity_id=snapshot.id,
                     kind=TriggerKind.STAGE_CHANGED,
                     reason=(
-                        f"L'opportunité « {snapshot.name} » est passée du stade "
-                        f"« {known.stage} » à « {snapshot.stage} »."
+                        f"Opportunity \"{snapshot.name}\" moved from stage "
+                        f"\"{known.stage}\" to \"{snapshot.stage}\"."
                     ),
                     detected_at=now,
                 )
@@ -128,8 +128,8 @@ def _from_known_states(
                     opportunity_id=opportunity_id,
                     kind=TriggerKind.SCHEDULED_FOLLOW_UP,
                     reason=(
-                        "L'échéance de relance fixée lors d'une décision d'attente est "
-                        f"atteinte (prévue le {state.follow_up_due_at:%Y-%m-%d})."
+                        "The follow-up deadline set during a decision to wait has been "
+                        f"reached (scheduled for {state.follow_up_due_at:%Y-%m-%d})."
                     ),
                     detected_at=now,
                 )
@@ -143,8 +143,8 @@ def _from_known_states(
                     opportunity_id=opportunity_id,
                     kind=TriggerKind.INACTIVITY,
                     reason=(
-                        f"Aucune action sur cette opportunité depuis {days} jours — "
-                        "à réévaluer."
+                        f"No action on this opportunity for {days} days — "
+                        "worth reassessing."
                     ),
                     detected_at=now,
                 )

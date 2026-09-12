@@ -45,9 +45,9 @@ class RunDecisionCycle:
         strategic = stakes.requires_strategic_reasoning(opportunity, trigger_kind)
         routing_reason = stakes.explain(opportunity, trigger_kind)
         logger.info(
-            "Opportunité %s routée en %s — %s",
+            "Opportunity %s routed as %s — %s",
             opportunity_id,
-            "stratégique" if strategic else "routine",
+            "strategic" if strategic else "routine",
             routing_reason,
         )
 
@@ -80,7 +80,7 @@ class RunDecisionCycle:
         try:
             return self.execute(opportunity_id, event, trigger_kind=trigger_kind)
         except OpportunityNotFound:
-            logger.warning("Opportunité %s introuvable — ignorée", opportunity_id)
+            logger.warning("Opportunity %s not found — skipped", opportunity_id)
         except Exception:  # noqa: BLE001 - an autonomous loop must never come to a halt
-            logger.exception("Cycle de décision en échec pour l'opportunité %s", opportunity_id)
+            logger.exception("Decision cycle failed for opportunity %s", opportunity_id)
         return None

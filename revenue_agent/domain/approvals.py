@@ -15,9 +15,9 @@ from revenue_agent.domain.policy import ActionKind
 
 
 class ApprovalStatus(StrEnum):
-    PENDING = "en_attente"
-    APPROVED = "approuve"
-    REJECTED = "rejete"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,11 +47,11 @@ class PendingApproval:
         subject = self.payload.get("subject")
         lines = [
             f"[{self.id}] {self.kind.value} → {self.recipient}",
-            f"  Opportunité : {self.company} ({self.opportunity_id})",
-            f"  Motif       : {self.reason}",
+            f"  Opportunity : {self.company} ({self.opportunity_id})",
+            f"  Reason      : {self.reason}",
         ]
         if subject:
-            lines.append(f"  Objet       : {subject}")
+            lines.append(f"  Subject     : {subject}")
         if preview:
             lines.append(f"  Message     : {preview[:300]}")
         return "\n".join(lines)

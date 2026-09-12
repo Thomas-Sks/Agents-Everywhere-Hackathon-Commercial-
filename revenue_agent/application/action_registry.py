@@ -76,7 +76,7 @@ class ActionRegistry:
         if product_id:
             product = self._catalog.get_product(product_id)
             if product is None:
-                return f"Produit '{product_id}' introuvable."
+                return f"Product '{product_id}' not found."
             products = [product]
         else:
             products = self._catalog.list_products()
@@ -85,9 +85,9 @@ class ActionRegistry:
             [
                 {
                     "id": product.id,
-                    "nom": product.name,
-                    "categorie": product.category,
-                    "prix": product.price,
+                    "name": product.name,
+                    "category": product.category,
+                    "price": product.price,
                     "description": product.description,
                 }
                 for product in products
@@ -99,14 +99,14 @@ class ActionRegistry:
     def research_prospect(self, company_name: str) -> str:
         insights = self._enrichment.research_company(company_name)
         if not insights:
-            return f"Aucun signal récent trouvé pour {company_name}."
+            return f"No recent signal found for {company_name}."
         return json.dumps(
             [
                 {
-                    "titre": insight.title,
+                    "title": insight.title,
                     "url": insight.url,
-                    "resume": insight.summary,
-                    "publie_le": insight.published_at.isoformat()
+                    "summary": insight.summary,
+                    "published_at": insight.published_at.isoformat()
                     if insight.published_at
                     else None,
                 }
@@ -128,7 +128,7 @@ class ActionRegistry:
             ),
         )
         self._remember_decision(opportunity_id)
-        return "Interaction enregistrée dans le CRM."
+        return "Interaction recorded in the CRM."
 
     def update_opportunity(
         self,
@@ -147,7 +147,7 @@ class ActionRegistry:
                 Objection(
                     id=uuid.uuid4().hex[:6],
                     text=objection,
-                    root_cause=objection_root_cause or "inconnue",
+                    root_cause=objection_root_cause or "unknown",
                     raised_at=_now(),
                 )
                 if objection
@@ -155,7 +155,7 @@ class ActionRegistry:
             ),
             next_steps=next_steps or None,
         )
-        return "Opportunité mise à jour dans le CRM."
+        return "Opportunity updated in the CRM."
 
     def update_stakeholder(
         self,
@@ -175,10 +175,10 @@ class ActionRegistry:
         parsed = _parse_stance(stance)
         if parsed is None:
             valid = ", ".join(option.value for option in Stance)
-            return f"Posture '{stance}' inconnue. Valeurs acceptées : {valid}."
+            return f"Unknown stance '{stance}'. Accepted values: {valid}."
 
         if not name.strip():
-            return "Le nom de l'interlocuteur est obligatoire."
+            return "The stakeholder's name is required."
 
         self._crm.update_stakeholder(
             opportunity_id,
@@ -190,9 +190,9 @@ class ActionRegistry:
         self._trace(
             opportunity_id,
             Channel.DECISION,
-            f"Partie prenante mise à jour : {name.strip()} — posture {parsed.value}",
+            f"Stakeholder updated: {name.strip()} — stance {parsed.value}",
         )
-        return f"{name.strip()} enregistré(e) comme « {parsed.value} » dans le CRM."
+        return f"{name.strip()} recorded as \"{parsed.value}\" in the CRM."
 
     def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> str:
         """Close an objection that has been dealt with.
@@ -202,15 +202,15 @@ class ActionRegistry:
         """
         if not self._crm.resolve_objection(opportunity_id, objection_id, resolution):
             return (
-                f"Objection '{objection_id}' introuvable sur cette opportunité. "
-                "Relis le contexte pour récupérer l'identifiant exact."
+                f"Objection '{objection_id}' not found on this opportunity. "
+                "Reread the context to get the exact identifier."
             )
         self._trace(
             opportunity_id,
             Channel.DECISION,
-            f"Objection {objection_id} résolue — {resolution}",
+            f"Objection {objection_id} resolved — {resolution}",
         )
-        return f"Objection {objection_id} marquée comme résolue."
+        return f"Objection {objection_id} marked as resolved."
 
     # -- Communication ------------------------------------------------------------
 
@@ -232,9 +232,9 @@ class ActionRegistry:
 
         message_id = self._email.send(to=address, subject=subject, body=body)
         self._after_send(
-            opportunity_id, Channel.EMAIL, f"Email envoyé à {address} — objet : {subject}"
+            opportunity_id, Channel.EMAIL, f"Email sent to {address} — subject: {subject}"
         )
-        return f"Email envoyé à {address} (id={message_id})."
+        return f"Email sent to {address} (id={message_id})."
 
     def send_whatsapp_message(self, opportunity_id: str, message: str) -> str:
         opportunity = self._crm.load_opportunity(opportunity_id)
@@ -253,8 +253,8 @@ class ActionRegistry:
             return refusal
 
         message_id = self._whatsapp.send(to_phone_number=phone, message=message)
-        self._after_send(opportunity_id, Channel.WHATSAPP, f"Message WhatsApp envoyé à {phone}")
-        return f"Message WhatsApp envoyé à {phone} (id={message_id})."
+        self._after_send(opportunity_id, Channel.WHATSAPP, f"WhatsApp message sent to {phone}")
+        return f"WhatsApp message sent to {phone} (id={message_id})."
 
     def place_phone_call(self, opportunity_id: str, objective: str) -> str:
         opportunity = self._crm.load_opportunity(opportunity_id)
@@ -276,9 +276,9 @@ class ActionRegistry:
             to_phone_number=phone, opportunity=opportunity, objective=objective
         )
         self._after_send(
-            opportunity_id, Channel.VOICE, f"Appel déclenché vers {phone} — objectif : {objective}"
+            opportunity_id, Channel.VOICE, f"Call placed to {phone} — objective: {objective}"
         )
-        return f"Appel en cours vers {phone} (call_id={call_id})."
+        return f"Call in progress to {phone} (call_id={call_id})."
 
     # -- Guardrails ---------------------------------------------------------------
 
@@ -321,7 +321,7 @@ class ActionRegistry:
             return None
 
         logger.warning(
-            "Action %s sur %s : %s (règle %s)",
+            "Action %s on %s: %s (rule %s)",
             kind.value,
             opportunity.id,
             decision.verdict.value,
@@ -331,13 +331,13 @@ class ActionRegistry:
             opportunity.id,
             Interaction(
                 channel=Channel.DECISION,
-                summary=f"[POLITIQUE] {kind.value} {decision.verdict.value} — {decision.reason}",
+                summary=f"[POLICY] {kind.value} {decision.verdict.value} — {decision.reason}",
                 occurred_at=_now(),
             ),
         )
 
         if decision.verdict is Verdict.BLOCK:
-            return f"ACTION BLOQUÉE ({decision.rule}) : {decision.reason}"
+            return f"ACTION BLOCKED ({decision.rule}): {decision.reason}"
 
         approval = self._approvals.submit(
             PendingApproval(
@@ -363,11 +363,11 @@ class ActionRegistry:
                 preview=" ".join(payload.values()),
             )
         except Exception:  # noqa: BLE001 - the action stays queued even if the ping fails
-            logger.exception("Notification de validation non remise pour %s", approval.id)
+            logger.exception("Approval notification not delivered for %s", approval.id)
 
         return (
-            f"ACTION EN ATTENTE DE VALIDATION (réf. {approval.id}) : {decision.reason} "
-            "Le message n'est pas parti. Un humain doit l'approuver."
+            f"ACTION AWAITING APPROVAL (ref. {approval.id}): {decision.reason} "
+            "The message has not gone out. A human must approve it."
         )
 
     def _catalogue_prices(self) -> tuple[float, ...]:
@@ -397,7 +397,7 @@ class ActionRegistry:
             human_approved=True,
         )
         if not decision.allowed:
-            return f"Action toujours bloquée après validation ({decision.rule}) : {decision.reason}"
+            return f"Action still blocked after approval ({decision.rule}): {decision.reason}"
 
         if approval.kind is ActionKind.EMAIL:
             self._email.send(
@@ -405,13 +405,13 @@ class ActionRegistry:
                 subject=approval.payload.get("subject", ""),
                 body=approval.payload.get("body", ""),
             )
-            summary = f"Email envoyé à {approval.recipient} après validation humaine"
+            summary = f"Email sent to {approval.recipient} after human approval"
             channel = Channel.EMAIL
         elif approval.kind is ActionKind.WHATSAPP:
             self._whatsapp.send(
                 to_phone_number=approval.recipient, message=approval.payload.get("message", "")
             )
-            summary = f"Message WhatsApp envoyé à {approval.recipient} après validation humaine"
+            summary = f"WhatsApp message sent to {approval.recipient} after human approval"
             channel = Channel.WHATSAPP
         else:
             self._voice.place_call(
@@ -419,7 +419,7 @@ class ActionRegistry:
                 opportunity=opportunity,
                 objective=approval.payload.get("objective", ""),
             )
-            summary = f"Appel déclenché vers {approval.recipient} après validation humaine"
+            summary = f"Call placed to {approval.recipient} after human approval"
             channel = Channel.VOICE
 
         self._after_send(approval.opportunity_id, channel, summary)
@@ -430,15 +430,15 @@ class ActionRegistry:
     def schedule_follow_up(self, opportunity_id: str, reason: str, due_date: str) -> str:
         due_at = _parse_date(due_date)
         if due_at is None:
-            return f"Date invalide : {due_date!r}. Format attendu AAAA-MM-JJ."
+            return f"Invalid date: {due_date!r}. Expected format YYYY-MM-DD."
 
         self._scan_state.schedule_follow_up(opportunity_id, due_at)
         self._trace(
             opportunity_id,
             Channel.DECISION,
-            f"Attente décidée jusqu'au {due_date} — motif : {reason}",
+            f"Deliberate wait until {due_date} — reason: {reason}",
         )
-        return f"Reprise programmée le {due_date}."
+        return f"Follow-up scheduled for {due_date}."
 
     def escalate_to_human(
         self, opportunity_id: str, reason: str, urgency: str, context_brief: str
@@ -453,9 +453,9 @@ class ActionRegistry:
         self._trace(
             opportunity_id,
             Channel.HANDOFF,
-            f"Escaladé à un humain ({urgency}) — {reason}",
+            f"Escalated to a human ({urgency}) — {reason}",
         )
-        return "Dossier transmis à un commercial humain avec le contexte complet."
+        return "File handed over to a human sales rep with the full context."
 
     # -- Internal -----------------------------------------------------------------
 
@@ -488,48 +488,48 @@ def serialise_opportunity(opportunity: Opportunity) -> dict:
     channels = opportunity.reachable_channels()
     return {
         "id": opportunity.id,
-        "entreprise": opportunity.company,
-        "stade": opportunity.stage,
-        "probabilite": opportunity.probability,
-        "montant": opportunity.amount,
+        "company": opportunity.company,
+        "stage": opportunity.stage,
+        "probability": opportunity.probability,
+        "amount": opportunity.amount,
         "source": opportunity.source,
-        "interlocuteurs": [
+        "stakeholders": [
             {
-                "nom": stakeholder.name,
+                "name": stakeholder.name,
                 "role": stakeholder.role,
-                "posture": stakeholder.stance.value,
+                "stance": stakeholder.stance.value,
                 "email": stakeholder.email,
-                "telephone": stakeholder.phone,
+                "phone": stakeholder.phone,
                 "notes": stakeholder.notes,
             }
             for stakeholder in opportunity.stakeholders
         ],
-        "objections_ouvertes": [
+        "open_objections": [
             {
                 # The identifier is exposed so the agent can close the objection
                 # precisely, without relying on a text match.
                 "id": objection.id,
-                "texte": objection.text,
-                "cause_probable": objection.root_cause,
+                "text": objection.text,
+                "probable_cause": objection.root_cause,
             }
             for objection in opportunity.unresolved_objections()
         ],
-        "historique": [
+        "history": [
             {
-                "canal": interaction.channel.value,
-                "resume": interaction.summary,
+                "channel": interaction.channel.value,
+                "summary": interaction.summary,
                 "date": interaction.occurred_at.isoformat(),
             }
             for interaction in opportunity.history[-MAX_HISTORY_EXPOSED:]
         ],
-        "prochaines_etapes": opportunity.next_steps,
-        "risques": opportunity.risk_notes,
-        "canaux_joignables": {
+        "next_steps": opportunity.next_steps,
+        "risks": opportunity.risk_notes,
+        "reachable_channels": {
             "email": channels.email,
-            "telephone": channels.phone,
-            "disponibles": [channel.value for channel in channels.available],
+            "phone": channels.phone,
+            "available": [channel.value for channel in channels.available],
         },
-        "decideur_engage": opportunity.has_decision_maker_engaged(),
+        "decision_maker_engaged": opportunity.has_decision_maker_engaged(),
     }
 
 

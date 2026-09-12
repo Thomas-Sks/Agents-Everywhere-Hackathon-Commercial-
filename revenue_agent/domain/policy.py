@@ -23,13 +23,13 @@ from revenue_agent.domain.review import ReviewFinding
 class ActionKind(StrEnum):
     EMAIL = "email"
     WHATSAPP = "whatsapp"
-    CALL = "appel téléphonique"
+    CALL = "phone call"
 
 
 class Verdict(StrEnum):
-    ALLOW = "autorisé"
-    REQUIRE_APPROVAL = "validation humaine requise"
-    BLOCK = "bloqué"
+    ALLOW = "allowed"
+    REQUIRE_APPROVAL = "approval required"
+    BLOCK = "blocked"
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,50 +92,51 @@ def evaluate(
     if settings.mode is AgentMode.DRY_RUN:
         return PolicyDecision(
             Verdict.BLOCK,
-            "mode_dry_run",
-            "L'agent tourne en mode simulation : aucune action sortante n'est émise.",
+            "dry_run_mode",
+            "The agent is running in simulation mode: no outbound action is emitted.",
         )
 
     if settings.allowed_recipients and not _is_allowed(action.recipient, settings):
         return PolicyDecision(
             Verdict.BLOCK,
-            "destinataire_hors_liste",
-            f"{action.recipient} ne figure pas dans la liste des destinataires autorisés.",
+            "recipient_not_allowed",
+            f"{action.recipient} is not on the list of allowed recipients.",
         )
 
     unknown_price = _unknown_price_quoted(action.content, catalogue_prices)
     if unknown_price is not None:
         return PolicyDecision(
             Verdict.BLOCK,
-            "prix_hors_catalogue",
-            f"Le message annonce un prix ({unknown_price:,.0f} €) absent du catalogue. "
-            "Un prix inventé engage l'entreprise : vérifie le catalogue produit.",
+            "price_not_in_catalogue",
+            f"The message quotes a price ({unknown_price:,.0f} €) that is not in the catalogue. "
+            "An invented price commits the company: check the product catalogue.",
         )
 
     if outbound_last_24h >= settings.max_outbound_per_day:
         return PolicyDecision(
             Verdict.BLOCK,
-            "cadence_maximale",
-            f"{outbound_last_24h} message(s) déjà envoyé(s) à ce prospect sur 24 h "
-            f"(maximum {settings.max_outbound_per_day}). Insister nuirait à la relation.",
+            "rate_limit",
+            f"{outbound_last_24h} message(s) already sent to this prospect in 24 h "
+            f"(maximum {settings.max_outbound_per_day}). Pushing further would hurt the "
+            "relationship.",
         )
 
     if human_approved:
         return PolicyDecision(
-            Verdict.ALLOW, "validation_humaine", "Action explicitement validée par un humain."
+            Verdict.ALLOW, "human_approved", "Action explicitly approved by a human."
         )
 
     if settings.mode is AgentMode.SUPERVISED:
         return PolicyDecision(
             Verdict.REQUIRE_APPROVAL,
-            "mode_supervise",
-            "L'agent est en mode supervisé : toute action sortante attend une validation.",
+            "supervised_mode",
+            "The agent is in supervised mode: every outbound action awaits approval.",
         )
 
     if review is not None and review.requires_human:
         return PolicyDecision(
             Verdict.REQUIRE_APPROVAL,
-            f"relecture_{review.category.value}",
+            f"review_{review.category.value}",
             review.describe(),
         )
 
@@ -145,12 +146,12 @@ def evaluate(
     ):
         return PolicyDecision(
             Verdict.REQUIRE_APPROVAL,
-            "montant_eleve",
-            f"L'opportunité porte sur {action.opportunity_amount:,.0f} €, au-delà du seuil "
-            f"d'autonomie ({settings.max_autonomous_amount:,.0f} €).",
+            "high_amount",
+            f"The opportunity is worth {action.opportunity_amount:,.0f} €, above the autonomy "
+            f"threshold ({settings.max_autonomous_amount:,.0f} €).",
         )
 
-    return PolicyDecision(Verdict.ALLOW, "autonomie", "Action dans les limites accordées.")
+    return PolicyDecision(Verdict.ALLOW, "autonomy", "Action within the granted limits.")
 
 
 def needs_message_review(settings: PolicySettings) -> bool:

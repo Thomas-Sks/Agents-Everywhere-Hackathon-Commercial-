@@ -331,7 +331,7 @@ Three concrete benefits:
 | Component | Choice |
 |---|---|
 | Reasoning | **GPT-5.6** via **OpenRouter** — `luna` for routine, `sol` when the stakes justify it |
-| Agent orchestration | **LangGraph** (`langchain.agents.create_agent`), one thread per opportunity, 10 tools |
+| Agent orchestration | **LangGraph** (`langchain.agents.create_agent`), one thread per opportunity, 12 tools |
 | Long-running orchestration | **Trigger.dev** — scan cron, durable waitpoints for follow-ups |
 | CRM | **HubSpot** (v3/v4 API, notes as shared memory), local JSON fallback |
 | Prospect research | **Exa** (bounded time window: a 2019 article is not a buying signal) |
@@ -375,12 +375,13 @@ screen:
 
 ```bash
 pip install -e ".[dev]"
-pytest          # 102 tests
+pytest          # 111 tests
 ruff check .
 ```
 
-**102 tests, no network, no model calls, 0.7 seconds.** They cover triage, stakes routing,
-channel resolution, the scan loop, the autonomy policy and message review. The tests in
+**111 tests, no network, no model calls, 0.8 seconds.** They cover triage, stakes routing,
+channel resolution, the scan loop, the autonomy policy, message review and the stakeholder
+map. The tests in
 `test_policy.py` are the most important in the repo: they are the ones verifying what stops a
 message from going out.
 

@@ -125,7 +125,7 @@ def test_the_first_scan_immediately_wakes_dormant_deals(crm, scan_state, agent):
     report = build_scanner(crm, scan_state, agent).execute()
 
     assert report.detected == 1
-    assert report.processed[0].trigger == "inactivite"
+    assert report.processed[0].trigger == "inactivity"
 
 
 def test_the_scheduled_follow_up_is_consumed_once_processed(crm, scan_state, agent):

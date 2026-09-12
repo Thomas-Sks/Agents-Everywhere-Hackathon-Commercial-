@@ -28,7 +28,7 @@ def crm_local(tmp_path) -> JsonFileCrmAdapter:
     adapter = JsonFileCrmAdapter(JsonDocument(tmp_path / "crm.json"))
     adapter.update_opportunity(
         "acme-co",
-        objection=Objection(id="ab12cd", text="C'est trop cher", root_cause="budget"),
+        objection=Objection(id="ab12cd", text="It is too expensive", root_cause="budget"),
     )
     return adapter
 
@@ -43,15 +43,15 @@ def test_an_objection_starts_open(crm_local):
 
 
 def test_a_resolved_objection_drops_out_of_the_open_ones(crm_local):
-    assert crm_local.resolve_objection("acme-co", "ab12cd", "Budget débloqué par le CFO") is True
+    assert crm_local.resolve_objection("acme-co", "ab12cd", "Budget released by the CFO") is True
 
     opportunity = crm_local.load_opportunity("acme-co")
     assert opportunity.unresolved_objections() == ()
-    assert opportunity.objections[0].resolution == "Budget débloqué par le CFO"
+    assert opportunity.objections[0].resolution == "Budget released by the CFO"
 
 
 def test_resolving_an_unknown_objection_fails_without_crashing(crm_local):
-    assert crm_local.resolve_objection("acme-co", "inexistante", "peu importe") is False
+    assert crm_local.resolve_objection("acme-co", "inexistante", "does not matter") is False
     assert len(crm_local.load_opportunity("acme-co").unresolved_objections()) == 1
 
 
@@ -62,14 +62,14 @@ def test_resolving_frees_up_the_economy_routing():
         id="acme-co",
         company="Acme",
         amount=1_000,
-        objections=(Objection(id="x1", text="Trop cher", root_cause="budget"),),
+        objections=(Objection(id="x1", text="Too expensive", root_cause="budget"),),
     )
     resolved_objection = Opportunity(
         id="acme-co",
         company="Acme",
         amount=1_000,
         objections=(
-            Objection(id="x1", text="Trop cher", root_cause="budget", resolved=True),
+            Objection(id="x1", text="Too expensive", root_cause="budget", resolved=True),
         ),
     )
 
@@ -86,7 +86,7 @@ def note(body: str, moment: str = "1757000000000") -> dict:
 
 def test_hubspot_notes_carry_the_objection_identifier():
     objections, _, _ = _parse_notes(
-        {"1": note("[OBJECTION:ab12cd] Trop cher | cause probable : budget")}
+        {"1": note("[OBJECTION:ab12cd] Trop cher | probable cause: budget")}
     )
 
     assert objections[0].id == "ab12cd"
@@ -96,21 +96,21 @@ def test_hubspot_notes_carry_the_objection_identifier():
 def test_a_resolution_note_closes_the_matching_objection():
     objections, _, _ = _parse_notes(
         {
-            "1": note("[OBJECTION:ab12cd] Trop cher | cause probable : budget"),
-            "2": note("[OBJECTION-RESOLUE:ab12cd] Budget débloqué"),
+            "1": note("[OBJECTION:ab12cd] Trop cher | probable cause: budget"),
+            "2": note("[OBJECTION-RESOLVED:ab12cd] Budget released"),
         }
     )
 
     assert objections[0].resolved is True
-    assert objections[0].resolution == "Budget débloqué"
+    assert objections[0].resolution == "Budget released"
 
 
 def test_resolution_works_even_when_the_note_arrives_first():
     """The API does not guarantee note ordering: resolutions must be collected first."""
     objections, _, _ = _parse_notes(
         {
-            "1": note("[OBJECTION-RESOLUE:ab12cd] Budget débloqué"),
-            "2": note("[OBJECTION:ab12cd] Trop cher | cause probable : budget"),
+            "1": note("[OBJECTION-RESOLVED:ab12cd] Budget released"),
+            "2": note("[OBJECTION:ab12cd] Trop cher | probable cause: budget"),
         }
     )
 
@@ -120,9 +120,9 @@ def test_resolution_works_even_when_the_note_arrives_first():
 def test_a_resolution_only_closes_the_objection_it_targets():
     objections, _, _ = _parse_notes(
         {
-            "1": note("[OBJECTION:aaa] Trop cher | cause probable : budget"),
-            "2": note("[OBJECTION:bbb] Mauvais timing | cause probable : contrat"),
-            "3": note("[OBJECTION-RESOLUE:aaa] Budget débloqué"),
+            "1": note("[OBJECTION:aaa] Trop cher | probable cause: budget"),
+            "2": note("[OBJECTION:bbb] Mauvais timing | probable cause: contrat"),
+            "3": note("[OBJECTION-RESOLVED:aaa] Budget released"),
         }
     )
 
@@ -132,7 +132,7 @@ def test_a_resolution_only_closes_the_objection_it_targets():
 
 
 def test_a_resolution_note_is_not_read_as_history():
-    objections, history, _ = _parse_notes({"1": note("[OBJECTION-RESOLUE:aaa] Réglé")})
+    objections, history, _ = _parse_notes({"1": note("[OBJECTION-RESOLVED:aaa] Réglé")})
 
     assert objections == ()
     assert history == (), "a resolution must not pollute the interaction history"
@@ -201,7 +201,7 @@ def test_the_objection_identifier_is_exposed_to_the_model(crm_local):
 
     payload = serialise_opportunity(crm_local.load_opportunity("acme-co"))
 
-    assert payload["objections_ouvertes"][0]["id"] == "ab12cd"
+    assert payload["open_objections"][0]["id"] == "ab12cd"
 
 
 def test_a_domain_stakeholder_is_left_intact():

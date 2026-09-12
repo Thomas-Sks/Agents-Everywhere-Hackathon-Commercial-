@@ -52,14 +52,14 @@ def requires_strategic_reasoning(
 def explain(opportunity: Opportunity, trigger_kind: TriggerKind | None = None) -> str:
     """Human-readable routing rationale — logged so that the cost stays explainable."""
     if opportunity.amount is not None and opportunity.amount >= STRATEGIC_AMOUNT_THRESHOLD:
-        return f"montant élevé ({opportunity.amount:,.0f})"
+        return f"high amount ({opportunity.amount:,.0f})"
     if _normalise(opportunity.stage) in LATE_STAGES:
-        return f"stade tardif ({opportunity.stage})"
+        return f"late stage ({opportunity.stage})"
     if opportunity.unresolved_objections():
-        return f"{len(opportunity.unresolved_objections())} objection(s) non résolue(s)"
+        return f"{len(opportunity.unresolved_objections())} unresolved objection(s)"
     if trigger_kind is TriggerKind.STAGE_CHANGED:
-        return "changement de stade"
-    return "décision de routine"
+        return "stage change"
+    return "routine decision"
 
 
 def _normalise(stage: str) -> str:

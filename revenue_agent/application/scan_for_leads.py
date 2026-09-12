@@ -54,20 +54,20 @@ class ScanReport:
 
     def as_dict(self) -> dict:
         return {
-            "deals_scannes": self.scanned_deals,
-            "opportunites_detectees": self.detected,
-            "opportunites_traitees": [
+            "deals_scanned": self.scanned_deals,
+            "opportunities_detected": self.detected,
+            "opportunities_processed": [
                 {
-                    "opportunite": item.opportunity_id,
-                    "declencheur": item.trigger,
-                    "raison": item.reason,
-                    "routage": "stratégique" if item.strategic else "routine",
+                    "opportunity": item.opportunity_id,
+                    "trigger": item.trigger,
+                    "reason": item.reason,
+                    "routing": "strategic" if item.strategic else "routine",
                     "decision": item.summary,
                 }
                 for item in self.processed
             ],
-            "reportees_au_prochain_scan": self.deferred,
-            "crm_disponible": self.crm_available,
+            "deferred_to_next_scan": self.deferred,
+            "crm_available": self.crm_available,
         }
 
 
@@ -108,7 +108,7 @@ class ScanForLeads:
         selected, deferred = triggers[:budget], max(0, len(triggers) - budget)
         if deferred:
             logger.info(
-                "%s opportunité(s) au-delà du plafond de %s — reportées au prochain scan",
+                "%s opportunity(ies) beyond the cap of %s — deferred to the next scan",
                 deferred,
                 budget,
             )
@@ -152,7 +152,7 @@ class ScanForLeads:
                     follow_up_due_at=None,
                 ),
             )
-        logger.info("Premier scan : %s opportunité(s) adoptée(s) depuis le CRM", len(snapshots))
+        logger.info("First scan: %s opportunity(ies) adopted from the CRM", len(snapshots))
 
     def _collect_snapshots(self, since: datetime) -> tuple[list[DealSnapshot], bool]:
         """Full pagination, deduplicated by identifier."""
@@ -165,7 +165,7 @@ class ScanForLeads:
                     since, cursor=cursor, page_size=self._settings.page_size
                 )
             except CrmError:
-                logger.exception("CRM indisponible pendant le scan — pointeur non avancé")
+                logger.exception("CRM unavailable during the scan — pointer not advanced")
                 return list(by_id.values()), False
 
             for snapshot in page.items:
@@ -176,7 +176,7 @@ class ScanForLeads:
                 break
             if page_number == MAX_PAGES - 1:
                 logger.warning(
-                    "Plafond de %s pages atteint — le reste sera repris au prochain scan",
+                    "Page cap of %s reached — the rest will be picked up on the next scan",
                     MAX_PAGES,
                 )
 

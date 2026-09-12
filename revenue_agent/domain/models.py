@@ -24,10 +24,10 @@ class Channel(StrEnum):
 
 class Stance(StrEnum):
     CHAMPION = "champion"
-    DECISION_MAKER = "decideur"
-    BLOCKER = "opposant"
-    NEUTRAL = "neutre"
-    UNKNOWN = "inconnu"
+    DECISION_MAKER = "decision_maker"
+    BLOCKER = "blocker"
+    NEUTRAL = "neutral"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +50,7 @@ class Objection:
     """
 
     text: str
-    root_cause: str = "inconnue"
+    root_cause: str = "unknown"
     resolved: bool = False
     raised_at: datetime | None = None
     id: str = ""

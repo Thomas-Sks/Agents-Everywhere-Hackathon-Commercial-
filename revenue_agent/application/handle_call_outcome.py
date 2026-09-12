@@ -32,7 +32,7 @@ class HandleCallOutcome:
             self._crm.log_call(outcome.opportunity_id, outcome)
         except CrmError:
             logger.exception(
-                "Impossible de logger l'appel dans le CRM pour l'opportunité %s",
+                "Could not log the call in the CRM for opportunity %s",
                 outcome.opportunity_id,
             )
 
@@ -42,19 +42,19 @@ class HandleCallOutcome:
 
 
 def _describe(outcome: CallOutcome) -> str:
-    lines = ["L'appel téléphonique avec le prospect vient de se terminer."]
+    lines = ["The phone call with the prospect has just ended."]
     if outcome.summary:
-        lines.append(f"Résumé de l'appel : {outcome.summary}")
+        lines.append(f"Call summary: {outcome.summary}")
     if outcome.sentiment:
-        lines.append(f"Sentiment détecté : {outcome.sentiment}")
+        lines.append(f"Detected sentiment: {outcome.sentiment}")
     if outcome.duration_seconds:
-        lines.append(f"Durée : {outcome.duration_seconds} secondes.")
+        lines.append(f"Duration: {outcome.duration_seconds} seconds.")
     if not outcome.successful:
-        lines.append("L'appel n'a pas abouti (pas de réponse ou raccrochage immédiat).")
+        lines.append("The call did not connect (no answer or immediate hang-up).")
     if outcome.transcript:
-        lines.append(f"\nTranscript :\n{outcome.transcript}")
+        lines.append(f"\nTranscript:\n{outcome.transcript}")
     lines.append(
-        "\nMets à jour ta compréhension de l'opportunité à partir de ce qui s'est réellement "
-        "dit, puis décide de la suite."
+        "\nUpdate your understanding of the opportunity from what was actually said, "
+        "then decide what comes next."
     )
     return "\n".join(lines)

@@ -158,10 +158,10 @@ class JsonFileCrmAdapter:
         return None
 
     def log_call(self, opportunity_id: str, outcome: CallOutcome) -> None:
-        summary = outcome.summary or "Appel terminé"
-        details = f"{summary} (durée {outcome.duration_seconds}s)"
+        summary = outcome.summary or "Call completed"
+        details = f"{summary} (duration {outcome.duration_seconds}s)"
         if outcome.transcript:
-            details += f"\nTranscript : {outcome.transcript}"
+            details += f"\nTranscript: {outcome.transcript}"
         self.record_interaction(
             opportunity_id,
             Interaction(
@@ -208,7 +208,7 @@ def _deserialise(opportunity_id: str, raw: dict) -> Opportunity:
         objections=tuple(
             Objection(
                 text=item.get("text", ""),
-                root_cause=item.get("root_cause", "inconnue"),
+                root_cause=item.get("root_cause", "unknown"),
                 resolved=bool(item.get("resolved", False)),
                 raised_at=_parse_datetime(item.get("raised_at")),
                 id=item.get("id", ""),

@@ -104,7 +104,7 @@ async def list_approvals(token: str | None = None) -> JSONResponse:
         [
             {
                 "id": approval.id,
-                "opportunite": approval.opportunity_id,
+                "opportunity": approval.opportunity_id,
                 "entreprise": approval.company,
                 "canal": approval.kind.value,
                 "destinataire": approval.recipient,
@@ -246,7 +246,7 @@ async def retell_webhook(
     opportunity_id = (call.get("metadata") or {}).get("opportunity_id")
     if not opportunity_id:
         logger.warning("Appel Retell sans opportunity_id dans metadata — ignoré")
-        return JSONResponse({"status": "ignoré", "raison": "opportunity_id absent"})
+        return JSONResponse({"status": "ignoré", "reason": "opportunity_id absent"})
 
     analysis = call.get("call_analysis") or {}
     outcome = CallOutcome(
@@ -261,7 +261,7 @@ async def retell_webhook(
     # Background processing: the decision cycle can take several seconds, and Retell
     # expects a fast acknowledgement.
     background_tasks.add_task(current.handle_call_outcome.execute, outcome)
-    return JSONResponse({"status": "accepté", "opportunite": opportunity_id})
+    return JSONResponse({"status": "accepté", "opportunity": opportunity_id})
 
 
 # -- WhatsApp ----------------------------------------------------------------------
@@ -293,14 +293,14 @@ async def whatsapp_inbound(request: Request, background_tasks: BackgroundTasks) 
     opportunity_id = _resolve_opportunity_by_phone(current, phone)
     if opportunity_id is None:
         logger.warning("Message WhatsApp de %s — aucune opportunité correspondante", phone)
-        return JSONResponse({"status": "ignoré", "raison": "prospect inconnu"})
+        return JSONResponse({"status": "ignoré", "reason": "prospect inconnu"})
 
     background_tasks.add_task(
         current.decision_cycle.execute_safely,
         opportunity_id,
         f"Message WhatsApp reçu du prospect : « {text} »",
     )
-    return JSONResponse({"status": "accepté", "opportunite": opportunity_id})
+    return JSONResponse({"status": "accepté", "opportunity": opportunity_id})
 
 
 # -- Helpers -----------------------------------------------------------------------

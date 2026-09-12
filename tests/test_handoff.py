@@ -39,9 +39,9 @@ class SpyHandoff:
 def escalate(composite: CompositeHandoffAdapter) -> None:
     composite.escalate(
         opportunity=build_opportunity(),
-        reason="Négociation au-delà de l'autonomie",
+        reason="Negotiation beyond autonomy limits",
         urgency="haute",
-        context_brief="Julie, directrice marketing. Budget validé par le CFO.",
+        context_brief="Julie, marketing director. Budget signed off by the CFO.",
     )
 
 
@@ -86,8 +86,8 @@ def test_the_same_guarantee_covers_approval_requests():
         opportunity=build_opportunity(),
         approval_id="ap-1",
         channel="email",
-        reason="Engagement commercial",
-        preview="Je vous propose une remise.",
+        reason="Commercial commitment",
+        preview="I can offer you a discount.",
     )
 
     assert console.notifications == ["ap-1"]
@@ -100,7 +100,7 @@ def test_holding_an_action_immediately_warns_a_human(crm, scan_state):
     """Without a notification, the approval queue is only read by whoever thinks to read it."""
     harness = build_harness(crm, scan_state, PolicySettings(mode=AgentMode.SUPERVISED))
 
-    harness.registry.send_email("acme-co", "Suivi", "Bonjour Julie")
+    harness.registry.send_email("acme-co", "Follow-up", "Hello Julie")
 
     assert len(harness.handoff.notifications) == 1
     assert harness.handoff.notifications[0]["channel"] == "email"
@@ -115,10 +115,10 @@ def test_a_failing_notification_does_not_lose_the_action(crm, scan_state, monkey
 
     monkeypatch.setattr(harness.handoff, "notify_pending_approval", boom)
 
-    result = harness.registry.send_email("acme-co", "Suivi", "Bonjour Julie")
+    result = harness.registry.send_email("acme-co", "Follow-up", "Hello Julie")
 
     assert len(harness.approvals.submitted) == 1
-    assert "EN ATTENTE DE VALIDATION" in result
+    assert "AWAITING APPROVAL" in result
     assert harness.email.sent == []
 
 
@@ -129,7 +129,7 @@ def test_a_failing_notification_does_not_lose_the_action(crm, scan_state, monkey
 def pending(crm, scan_state):
     harness = build_harness(crm, scan_state, PolicySettings(mode=AgentMode.SUPERVISED))
     harness.registry.send_email(
-        "acme-co", "Relance trimestrielle", "Bonjour Julie, où en êtes-vous ?"
+        "acme-co", "Quarterly follow-up", "Hello Julie, where do things stand?"
     )
     return harness.approvals.submitted
 
@@ -137,27 +137,27 @@ def pending(crm, scan_state):
 def test_the_page_shows_the_exact_message_that_will_go_out(pending):
     html = render(list(pending), "jeton", "Exalt")
 
-    assert "Relance trimestrielle" in html
-    assert "Bonjour Julie, où en êtes-vous ?" in html
+    assert "Quarterly follow-up" in html
+    assert "Hello Julie, where do things stand?" in html
 
 
 def test_the_page_offers_both_verdicts(pending):
     html = render(list(pending), "jeton", "Exalt")
 
-    assert "Approuver et envoyer" in html
-    assert "Rejeter" in html
+    assert "Approve and send" in html
+    assert "Reject" in html
 
 
 def test_an_empty_page_says_so_clearly():
     html = render([], "jeton", "Exalt")
 
-    assert "Aucune action en attente" in html
+    assert "No action pending" in html
 
 
 def test_the_message_content_is_escaped(crm, scan_state):
     """A message body is drafted by a model: it must never be injected raw."""
     harness = build_harness(crm, scan_state, PolicySettings(mode=AgentMode.SUPERVISED))
-    harness.registry.send_email("acme-co", "Objet", "<script>alert('xss')</script>")
+    harness.registry.send_email("acme-co", "Subject", "<script>alert('xss')</script>")
 
     html = render(list(harness.approvals.submitted), "jeton", "Exalt")
 
@@ -178,8 +178,8 @@ def test_whatsapp_handoff_notifies_every_configured_colleague():
         opportunity=build_opportunity(),
         approval_id="ap-1",
         channel="email",
-        reason="Engagement commercial",
-        preview="Je vous propose une remise.",
+        reason="Commercial commitment",
+        preview="I can offer you a discount.",
     )
 
     assert [sent["to"] for sent in whatsapp.sent] == ["+33600000001", "+33600000002"]
@@ -198,8 +198,8 @@ def test_the_whatsapp_message_carries_the_arbitration_link():
         opportunity=build_opportunity(),
         approval_id="ap-1",
         channel="email",
-        reason="Engagement commercial",
-        preview="Bonjour",
+        reason="Commercial commitment",
+        preview="Hello",
     )
 
     assert "https://demo.test/ui#ap-1" in whatsapp.sent[0]["message"]

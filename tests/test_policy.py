@@ -22,7 +22,7 @@ from revenue_agent.domain.review import MessageUnderReview
 CATALOGUE = (550.0, 4800.0, 22000.0)
 
 
-def action(content: str = "Bonjour, seriez-vous disponible mardi ?", **overrides) -> OutboundAction:
+def action(content: str = "Hello, would you be available on Tuesday?", **overrides) -> OutboundAction:
     defaults = {
         "kind": ActionKind.EMAIL,
         "opportunity_id": "acme-co",
@@ -66,7 +66,7 @@ def test_supervised_mode_requires_approval_for_everything():
     decision = decide(action(), PolicySettings(mode=AgentMode.SUPERVISED))
 
     assert decision.verdict is Verdict.REQUIRE_APPROVAL
-    assert decision.rule == "mode_supervise"
+    assert decision.rule == "supervised_mode"
 
 
 def test_dry_run_mode_blocks_everything():
@@ -85,13 +85,13 @@ def test_autonomous_mode_lets_an_innocuous_action_through():
 @pytest.mark.parametrize(
     "content",
     [
-        "Je peux vous proposer une remise exceptionnelle.",
-        "Nous pouvons envisager un rabais sur ce volume.",
-        "Une réduction de 15 % est envisageable.",
-        "Exceptionnellement, -20% sur la première année.",
-        "Je vous fais un geste commercial.",
-        "Le premier mois serait gratuit.",
-        "La formation vous est offerte.",
+        "I can offer you an exceptional discount.",
+        "We could consider a rebate at that volume.",
+        "A 15% reduction is possible.",
+        "Exceptionally, -20% on the first year.",
+        "I will waive the setup fee for you.",
+        "The first month would be free of charge.",
+        "Training is complimentary.",
     ],
 )
 def test_every_commercial_commitment_requires_approval(content):
@@ -100,11 +100,11 @@ def test_every_commercial_commitment_requires_approval(content):
     decision = decide(action(content), autonomous())
 
     assert decision.verdict is Verdict.REQUIRE_APPROVAL
-    assert decision.rule.startswith("relecture_")
+    assert decision.rule.startswith("review_")
 
 
 def test_a_message_without_any_commitment_goes_through():
-    decision = decide(action("Souhaitez-vous que je vous rappelle jeudi ?"), autonomous())
+    decision = decide(action("Would you like me to call you back on Thursday?"), autonomous())
 
     assert decision.verdict is Verdict.ALLOW
 
@@ -113,14 +113,14 @@ def test_a_message_without_any_commitment_goes_through():
 
 
 def test_a_price_absent_from_the_catalogue_is_blocked():
-    decision = decide(action("Notre solution est à 3 200 € par an."), autonomous())
+    decision = decide(action("Our solution is 3,200 EUR per year."), autonomous())
 
     assert decision.verdict is Verdict.BLOCK
-    assert decision.rule == "prix_hors_catalogue"
+    assert decision.rule == "price_not_in_catalogue"
 
 
 def test_a_price_from_the_catalogue_is_accepted():
-    decision = decide(action("La GTX Pro est à 4800 €."), autonomous())
+    decision = decide(action("The GTX Pro is 4800 EUR."), autonomous())
 
     assert decision.verdict is Verdict.ALLOW
 
@@ -128,7 +128,7 @@ def test_a_price_from_the_catalogue_is_accepted():
 def test_numbers_without_a_currency_marker_are_not_prices():
     """"10 users" or a year must not trigger a pricing block."""
     decision = decide(
-        action("La licence couvre 10 utilisateurs, disponible depuis 2024."), autonomous()
+        action("The licence covers 10 users, available since 2024."), autonomous()
     )
 
     assert decision.verdict is Verdict.ALLOW
@@ -137,7 +137,7 @@ def test_numbers_without_a_currency_marker_are_not_prices():
 def test_a_price_block_outranks_an_approval_request():
     """Two rules apply: the block must win, never the other way round."""
     decision = decide(
-        action("Remise exceptionnelle : 3 200 € au lieu du tarif public."), autonomous()
+        action("Exceptional discount: 3,200 EUR instead of list price."), autonomous()
     )
 
     assert decision.verdict is Verdict.BLOCK
@@ -152,7 +152,7 @@ def test_a_recipient_outside_the_allow_list_is_blocked():
     decision = decide(action(recipient="vrai.prospect@entreprise.com"), settings)
 
     assert decision.verdict is Verdict.BLOCK
-    assert decision.rule == "destinataire_hors_liste"
+    assert decision.rule == "recipient_not_allowed"
 
 
 def test_an_allowed_recipient_goes_through():
@@ -165,7 +165,7 @@ def test_the_maximum_cadence_protects_the_prospect():
     decision = decide(action(), autonomous(max_outbound_per_day=3), outbound_last_24h=3)
 
     assert decision.verdict is Verdict.BLOCK
-    assert decision.rule == "cadence_maximale"
+    assert decision.rule == "rate_limit"
 
 
 # -- Amount -------------------------------------------------------------------------
@@ -177,7 +177,7 @@ def test_a_large_amount_requires_approval():
     )
 
     assert decision.verdict is Verdict.REQUIRE_APPROVAL
-    assert decision.rule == "montant_eleve"
+    assert decision.rule == "high_amount"
 
 
 # -- Replay after human approval ----------------------------------------------------
@@ -185,7 +185,7 @@ def test_a_large_amount_requires_approval():
 
 def test_a_human_approval_lifts_the_approval_rules():
     decision = decide(
-        action("Je vous propose une remise de 15 %."), autonomous(), human_approved=True
+        action("I can offer you a 15% discount."), autonomous(), human_approved=True
     )
 
     assert decision.verdict is Verdict.ALLOW

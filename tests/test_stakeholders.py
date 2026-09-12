@@ -28,19 +28,19 @@ def harness(crm, scan_state):
 # -- The action ---------------------------------------------------------------------
 
 
-def test_l_agent_peut_enregistrer_une_posture(harness, crm):
+def test_the_agent_can_record_a_stance(harness, crm):
     result = harness.registry.update_stakeholder(
-        "acme-co", "Marc Dubois", "decideur", role="Directeur Financier"
+        "acme-co", "Marc Dubois", "decision_maker", role="CFO"
     )
 
     assert crm.stakeholder_updates[0]["stance"] is Stance.DECISION_MAKER
-    assert "decideur" in result
+    assert "decision_maker" in result
 
 
-def test_une_personne_jamais_contactee_entre_dans_la_carte(harness, crm):
+def test_a_never_contacted_person_enters_the_map(harness, crm):
     """Le CFO qui valide le budget compte, même sans coordonnées — c'est souvent lui qui
     décide du sort de l'affaire."""
-    harness.registry.update_stakeholder("acme-co", "Marc Dubois", "decideur")
+    harness.registry.update_stakeholder("acme-co", "Marc Dubois", "decision_maker")
 
     stakeholders = crm.load_opportunity("acme-co").stakeholders
     marc = next(s for s in stakeholders if s.name == "Marc Dubois")
@@ -48,8 +48,8 @@ def test_une_personne_jamais_contactee_entre_dans_la_carte(harness, crm):
     assert marc.email is None
 
 
-def test_une_posture_inconnue_est_refusee_explicitement(harness, crm):
-    """Une posture fausse corrompt la carte : on le dit au modèle plutôt que de retomber
+def test_an_unknown_stance_is_refused_explicitly(harness, crm):
+    """A wrong stance corrupts the map: we tell the model rather than falling back
     silencieusement sur « inconnu »."""
     result = harness.registry.update_stakeholder("acme-co", "Marc Dubois", "sceptique")
 
@@ -57,8 +57,8 @@ def test_une_posture_inconnue_est_refusee_explicitement(harness, crm):
     assert crm.stakeholder_updates == []
 
 
-def test_la_mise_a_jour_laisse_une_trace_dans_le_crm(harness, crm):
-    harness.registry.update_stakeholder("acme-co", "Marc Dubois", "opposant")
+def test_the_update_leaves_a_trace_in_the_crm(harness, crm):
+    harness.registry.update_stakeholder("acme-co", "Marc Dubois", "blocker")
 
     assert any("Marc Dubois" in i.summary for _, i in crm.interactions)
 
@@ -66,7 +66,7 @@ def test_la_mise_a_jour_laisse_une_trace_dans_le_crm(harness, crm):
 # -- Persistence, local adapter -----------------------------------------------------
 
 
-def test_le_crm_local_persiste_la_posture(tmp_path):
+def test_the_local_crm_persists_the_stance(tmp_path):
     document = JsonDocument(tmp_path / "crm.json")
     document.write(
         {
@@ -86,7 +86,7 @@ def test_le_crm_local_persiste_la_posture(tmp_path):
 
     julie = adapter.load_opportunity("acme-co").stakeholders[0]
     assert julie.stance is Stance.CHAMPION
-    # Mettre à jour une posture ne doit pas effacer ce qu'on savait déjà.
+    # Updating a stance must not erase what we already knew.
     assert julie.email == "j@acme.test"
     assert julie.role == "Marketing"
 
@@ -98,9 +98,9 @@ def note(body: str, millis: int) -> dict:
     return {"hs_note_body": body, "hs_timestamp": str(millis)}
 
 
-def test_la_posture_ecrite_en_note_est_relue_au_scan_suivant():
+def test_a_stance_written_as_a_note_is_read_back_on_the_next_scan():
     _, _, stances = _parse_notes(
-        {"1": note("[PARTIE-PRENANTE] Julie Martin | posture : champion | Après la démo", 1_700)}
+        {"1": note("[STAKEHOLDER] Julie Martin | stance: champion | After the demo", 1_700)}
     )
 
     merged = _merge_stances((Stakeholder(name="Julie Martin", email="j@acme.test"),), stances)
@@ -109,22 +109,22 @@ def test_la_posture_ecrite_en_note_est_relue_au_scan_suivant():
     assert merged[0].email == "j@acme.test", "la coordonnée HubSpot ne doit pas être perdue"
 
 
-def test_la_note_la_plus_recente_gagne():
-    """Une posture évolue : neutre, puis champion, puis opposant quand le budget est refusé."""
+def test_the_most_recent_note_wins():
+    """Une posture évolue : neutral, puis champion, puis blocker quand le budget est refusé."""
     _, _, stances = _parse_notes(
         {
-            "1": note("[PARTIE-PRENANTE] Julie Martin | posture : champion", 2_000),
-            "2": note("[PARTIE-PRENANTE] Julie Martin | posture : opposant", 9_000),
+            "1": note("[STAKEHOLDER] Julie Martin | stance: champion", 2_000),
+            "2": note("[STAKEHOLDER] Julie Martin | stance: blocker", 9_000),
         }
     )
 
     assert stances["julie martin"].stance is Stance.BLOCKER
 
 
-def test_une_note_de_partie_prenante_n_est_pas_confondue_avec_l_historique():
+def test_a_stakeholder_note_is_not_mistaken_for_history():
     _, history, stances = _parse_notes(
         {
-            "1": note("[PARTIE-PRENANTE] Marc Dubois | posture : decideur", 1_700),
+            "1": note("[STAKEHOLDER] Marc Dubois | stance: decision_maker", 1_700),
             "2": note("[INTERACTION] (email) Relance envoyée", 1_700),
         }
     )
@@ -133,18 +133,18 @@ def test_une_note_de_partie_prenante_n_est_pas_confondue_avec_l_historique():
     assert len(history) == 1
 
 
-def test_le_role_et_les_notes_survivent_a_l_aller_retour():
+def test_role_and_notes_survive_the_round_trip():
     _, _, stances = _parse_notes(
         {
             "1": note(
-                "[PARTIE-PRENANTE] Marc Dubois | rôle : Directeur Financier | "
-                "posture : decideur | Valide le budget, jamais contacté",
+                "[STAKEHOLDER] Marc Dubois | role: CFO | "
+                "stance: decision_maker | Signs off the budget, never contacted",
                 1_700,
             )
         }
     )
     marc = _merge_stances((), stances)[0]
 
-    assert marc.role == "Directeur Financier"
-    assert "Valide le budget" in marc.notes
+    assert marc.role == "CFO"
+    assert "Signs off the budget" in marc.notes
     assert marc.stance is Stance.DECISION_MAKER

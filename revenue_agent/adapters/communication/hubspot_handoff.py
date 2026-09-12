@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.hubapi.com"
 
-_PRIORITY_BY_URGENCY = {"haute": "HIGH", "normale": "MEDIUM", "faible": "LOW"}
+_PRIORITY_BY_URGENCY = {"high": "HIGH", "normal": "MEDIUM", "low": "LOW"}
 
 
 class HubSpotHandoffAdapter:
@@ -38,8 +38,8 @@ class HubSpotHandoffAdapter:
     ) -> None:
         self._create_task(
             opportunity=opportunity,
-            subject=f"[Agent] Reprise nécessaire — {opportunity.company}",
-            body=f"Motif de l'escalade : {reason}\n\n{context_brief}",
+            subject=f"[Agent] Hand-over needed — {opportunity.company}",
+            body=f"Reason for the escalation: {reason}\n\n{context_brief}",
             priority=_PRIORITY_BY_URGENCY.get(urgency.lower(), "MEDIUM"),
         )
 
@@ -48,12 +48,12 @@ class HubSpotHandoffAdapter:
     ) -> None:
         self._create_task(
             opportunity=opportunity,
-            subject=f"[Agent] Validation requise ({channel}) — {opportunity.company}",
+            subject=f"[Agent] Approval required ({channel}) — {opportunity.company}",
             body=(
-                f"L'agent a préparé une action mais ne l'a pas envoyée.\n\n"
-                f"Motif : {reason}\n"
-                f"Référence : {approval_id}\n\n"
-                f"Message retenu :\n{preview}"
+                f"The agent drafted an action but did not send it.\n\n"
+                f"Reason: {reason}\n"
+                f"Reference: {approval_id}\n\n"
+                f"Message held back:\n{preview}"
             ),
             priority="HIGH",
         )
@@ -80,8 +80,8 @@ class HubSpotHandoffAdapter:
             f"/crm/v4/objects/tasks/{payload['id']}/associations/default/deals/{opportunity.id}",
         )
         logger.info(
-            "Tâche HubSpot %s créée sur l'opportunité %s (propriétaire %s)",
+            "HubSpot task %s created on opportunity %s (owner %s)",
             payload["id"],
             opportunity.id,
-            owner_id or "non assigné",
+            owner_id or "unassigned",
         )

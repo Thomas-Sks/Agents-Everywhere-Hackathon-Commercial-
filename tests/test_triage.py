@@ -57,7 +57,7 @@ def test_prolonged_inactivity_wakes_the_opportunity_up():
     triggers = select_triggers([], known, NOW, inactivity_days=14)
 
     assert triggers[0].kind is TriggerKind.INACTIVITY
-    assert "20 jours" in triggers[0].reason
+    assert "20 days" in triggers[0].reason
 
 
 def test_inactivity_below_the_threshold_is_ignored():

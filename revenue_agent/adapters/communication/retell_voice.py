@@ -95,7 +95,7 @@ def verify_signature(*, payload: bytes, signature: str | None, secret: str) -> b
     would invalidate the comparison at the slightest whitespace difference.
     """
     if not secret:
-        raise VoiceError("retell", "secret de webhook non configuré")
+        raise VoiceError("retell", "webhook secret not configured")
     if not signature:
         return False
     expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()

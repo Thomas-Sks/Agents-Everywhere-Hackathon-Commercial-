@@ -72,7 +72,7 @@ def _demo_opportunities() -> dict:
                     "role": "Directeur Financier",
                     "email": "marc.dubois@acme.example",
                     "phone": None,
-                    "stance": "decideur",
+                    "stance": "decision_maker",
                     "notes": "Valide le budget. Jamais contacté directement à ce jour.",
                 },
             ],

@@ -58,9 +58,9 @@ MAX_NOTES_READ = 20
 # previous one. Hence a short identifier carried by the objection note and echoed by the
 # resolution note. Matching on text would break at the slightest rewording.
 _OBJECTION_RE = re.compile(r"^\[OBJECTION(?::([A-Za-z0-9]+))?\]\s*(.*)", re.DOTALL)
-# `[PARTIE-PRENANTE] Nom | posture : decideur | notes libres`
-_STAKEHOLDER_RE = re.compile(r"^\[PARTIE-PRENANTE\]\s*(.*)", re.DOTALL)
-_RESOLUTION_RE = re.compile(r"^\[OBJECTION-RESOLUE:([A-Za-z0-9]+)\]\s*(.*)", re.DOTALL)
+# `[STAKEHOLDER] Name | stance: decision_maker | free-form notes`
+_STAKEHOLDER_RE = re.compile(r"^\[STAKEHOLDER\]\s*(.*)", re.DOTALL)
+_RESOLUTION_RE = re.compile(r"^\[OBJECTION-RESOLVED:([A-Za-z0-9]+)\]\s*(.*)", re.DOTALL)
 
 
 class HubSpotCrmAdapter:
@@ -219,17 +219,17 @@ class HubSpotCrmAdapter:
         interface and re-parsable by the agent on the next scan — the same single source of
         truth, with nothing to configure.
         """
-        segments = [f"{name.strip()}", f"posture : {stance.value}"]
+        segments = [f"{name.strip()}", f"stance: {stance.value}"]
         if role.strip():
-            segments.insert(1, f"rôle : {role.strip()}")
+            segments.insert(1, f"role: {role.strip()}")
         if notes.strip():
             segments.append(notes.strip())
-        self._create_note(opportunity_id, f"[PARTIE-PRENANTE] {' | '.join(segments)}")
+        self._create_note(opportunity_id, f"[STAKEHOLDER] {' | '.join(segments)}")
 
     def resolve_objection(self, opportunity_id: str, objection_id: str, resolution: str) -> bool:
         if not objection_id:
             return False
-        self._create_note(opportunity_id, f"[OBJECTION-RESOLUE:{objection_id}] {resolution}")
+        self._create_note(opportunity_id, f"[OBJECTION-RESOLVED:{objection_id}] {resolution}")
         return True
 
     def find_opportunity_by_phone(self, phone_number: str) -> str | None:
@@ -348,9 +348,9 @@ def _parse_stakeholder_note(body: str, occurred_at: datetime) -> _StakeholderNot
 
     for segment in segments[1:]:
         lowered = segment.casefold()
-        if lowered.startswith("posture :"):
+        if lowered.startswith("stance:"):
             stance = _parse_stance(segment.split(":", 1)[1])
-        elif lowered.startswith("rôle :") or lowered.startswith("role :"):
+        elif lowered.startswith("role:"):
             role = segment.split(":", 1)[1].strip()
         else:
             notes.append(segment)
@@ -454,7 +454,7 @@ def _parse_notes(
                 Objection(
                     id=objection.group(1) or "",
                     text=text.strip(),
-                    root_cause=cause.strip() or "inconnue",
+                    root_cause=cause.strip() or "unknown",
                     raised_at=occurred_at,
                 )
             )

@@ -26,5 +26,5 @@ class ResendEmailAdapter:
             json={"from": self._from_address, "to": [to], "subject": subject, "text": body},
         )
         message_id = payload.get("id", "")
-        logger.info("Email envoyé à %s (id=%s)", to, message_id)
+        logger.info("Email sent to %s (id=%s)", to, message_id)
         return message_id

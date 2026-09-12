@@ -294,7 +294,7 @@ def build_opportunity(
         stakeholders=(
             Stakeholder(
                 name="Julie Martin",
-                role="Directrice Marketing",
+                role="Marketing Director",
                 email=email,
                 phone=phone,
                 stance=Stance.CHAMPION,

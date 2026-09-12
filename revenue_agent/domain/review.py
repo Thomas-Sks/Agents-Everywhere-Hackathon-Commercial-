@@ -18,15 +18,15 @@ from enum import StrEnum
 class ReviewCategory(StrEnum):
     """Grounds for escalation, as a sales director would phrase them."""
 
-    NONE = "aucun"
-    PRICE_COMMITMENT = "engagement_prix"
-    CONTRACTUAL_COMMITMENT = "engagement_contractuel"
-    UNBACKED_PROMISE = "promesse_intenable"
-    PREMATURE_CONCESSION = "concession_prematuree"
-    EXCESSIVE_PRESSURE = "pression_excessive"
-    CLIENT_REFERENCE = "reference_client"
-    STAGE_MISMATCH = "inadapte_au_stade"
-    LEGAL_EXPOSURE = "exposition_juridique"
+    NONE = "none"
+    PRICE_COMMITMENT = "price_commitment"
+    CONTRACTUAL_COMMITMENT = "contractual_commitment"
+    UNBACKED_PROMISE = "unbacked_promise"
+    PREMATURE_CONCESSION = "premature_concession"
+    EXCESSIVE_PRESSURE = "excessive_pressure"
+    CLIENT_REFERENCE = "client_reference"
+    STAGE_MISMATCH = "stage_mismatch"
+    LEGAL_EXPOSURE = "legal_exposure"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +63,7 @@ class ReviewFinding:
     def describe(self) -> str:
         parts = [self.rationale or self.category.value]
         if self.quote:
-            parts.append(f"Passage en cause : « {self.quote.strip()} »")
+            parts.append(f'Passage at issue: "{self.quote.strip()}"')
         return " ".join(parts)
 
 

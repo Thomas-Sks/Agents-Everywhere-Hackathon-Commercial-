@@ -63,11 +63,11 @@ class HttpClient:
                 if attempt < self._max_retries:
                     self._sleep(attempt)
                     continue
-                raise self._error_factory(f"{method} {path} : échec réseau ({exc})") from exc
+                raise self._error_factory(f"{method} {path}: network failure ({exc})") from exc
 
             if response.status_code in _RETRYABLE_STATUS and attempt < self._max_retries:
                 logger.warning(
-                    "Réponse %s sur %s %s — nouvelle tentative (%s/%s)",
+                    "Response %s on %s %s — retrying (%s/%s)",
                     response.status_code,
                     method,
                     path,
@@ -87,9 +87,9 @@ class HttpClient:
             try:
                 return response.json()
             except ValueError as exc:
-                raise self._error_factory(f"{method} {path} : réponse non-JSON") from exc
+                raise self._error_factory(f"{method} {path}: non-JSON response") from exc
 
-        raise self._error_factory(f"{method} {path} : échec après retries ({last_error})")
+        raise self._error_factory(f"{method} {path}: failed after retries ({last_error})")
 
     @staticmethod
     def _sleep(attempt: int, response: httpx.Response | None = None) -> None:
