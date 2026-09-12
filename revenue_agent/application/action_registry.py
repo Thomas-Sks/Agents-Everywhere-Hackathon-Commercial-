@@ -315,6 +315,19 @@ class ActionRegistry:
                 payload=payload,
             )
         )
+        # Une action retenue dont personne n'est informé n'est pas « en attente », elle est
+        # perdue. La notification est donc indissociable de la mise en file.
+        try:
+            self._handoff.notify_pending_approval(
+                opportunity=opportunity,
+                approval_id=approval.id,
+                channel=kind.value,
+                reason=decision.reason,
+                preview=" ".join(payload.values()),
+            )
+        except Exception:  # noqa: BLE001 - l'action reste en file même si le ping échoue
+            logger.exception("Notification de validation non remise pour %s", approval.id)
+
         return (
             f"ACTION EN ATTENTE DE VALIDATION (réf. {approval.id}) : {decision.reason} "
             "Le message n'est pas parti. Un humain doit l'approuver."

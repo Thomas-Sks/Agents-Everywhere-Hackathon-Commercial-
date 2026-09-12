@@ -20,13 +20,14 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request, Response
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from revenue_agent.adapters.communication.retell_voice import verify_signature
 from revenue_agent.config import Settings
 from revenue_agent.container import Container, build_container
 from revenue_agent.domain.errors import RevenueAgentError
 from revenue_agent.domain.models import CallOutcome
+from revenue_agent.entrypoints.approval_page import render as render_approval_page
 from revenue_agent.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -74,13 +75,32 @@ async def health() -> dict:
 # -- Validation humaine ------------------------------------------------------------
 
 
+def _approval_access_ok(current: Container, token: str | None) -> bool:
+    """Les routes d'arbitrage déclenchent de vrais envois : elles ne peuvent pas rester
+    ouvertes sur une URL publique.
+
+    Le jeton circule en paramètre d'URL pour qu'un lien reçu dans Teams soit cliquable depuis
+    un téléphone. C'est un compromis assumé — un jeton dans une URL se retrouve dans les
+    journaux de serveur — acceptable pour un outil interne à courte durée de vie, à remplacer
+    par une vraie authentification si l'outil se pérennise.
+    """
+    expected = current.settings.handoff.approval_ui_token
+    if not expected:
+        logger.warning("APPROVAL_UI_TOKEN non configuré — les routes d'arbitrage sont ouvertes")
+        return True
+    return bool(token and hmac.compare_digest(token, expected))
+
+
 @app.get("/approvals")
-async def list_approvals() -> JSONResponse:
+async def list_approvals(token: str | None = None) -> JSONResponse:
     """Actions retenues par la politique, en attente d'arbitrage humain.
 
     Tant qu'une action figure ici, rien n'est parti chez le prospect.
     """
-    pending = container().review_approval.list_pending()
+    current = container()
+    if not _approval_access_ok(current, token):
+        return JSONResponse({"detail": "Accès refusé"}, status_code=401)
+    pending = current.review_approval.list_pending()
     return JSONResponse(
         [
             {
@@ -99,19 +119,45 @@ async def list_approvals() -> JSONResponse:
     )
 
 
+@app.get("/approvals/ui", response_class=HTMLResponse)
+async def approvals_ui(token: str | None = None) -> Response:
+    """Page d'arbitrage : le message exact qui partira, et deux boutons.
+
+    C'est ce qui sort la validation du terminal — le destinataire d'une notification Teams
+    ouvre ce lien sur son téléphone et tranche en deux secondes.
+    """
+    current = container()
+    if not _approval_access_ok(current, token):
+        return HTMLResponse("<p>Lien d'arbitrage invalide ou expiré.</p>", status_code=401)
+
+    return HTMLResponse(
+        render_approval_page(
+            current.review_approval.list_pending(),
+            token or "",
+            current.settings.company_name,
+        )
+    )
+
+
 @app.post("/approvals/{approval_id}/approve")
-async def approve(approval_id: str, request: Request) -> JSONResponse:
+async def approve(approval_id: str, request: Request, token: str | None = None) -> JSONResponse:
+    current = container()
+    if not _approval_access_ok(current, token):
+        return JSONResponse({"detail": "Accès refusé"}, status_code=401)
     body = _safe_json(await request.body())
-    result = container().review_approval.approve(
+    result = current.review_approval.approve(
         approval_id, body.get("reviewer", "api"), body.get("note", "")
     )
     return JSONResponse({"resultat": result})
 
 
 @app.post("/approvals/{approval_id}/reject")
-async def reject(approval_id: str, request: Request) -> JSONResponse:
+async def reject(approval_id: str, request: Request, token: str | None = None) -> JSONResponse:
+    current = container()
+    if not _approval_access_ok(current, token):
+        return JSONResponse({"detail": "Accès refusé"}, status_code=401)
     body = _safe_json(await request.body())
-    result = container().review_approval.reject(
+    result = current.review_approval.reject(
         approval_id, body.get("reviewer", "api"), body.get("note", "")
     )
     return JSONResponse({"resultat": result})

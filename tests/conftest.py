@@ -181,9 +181,18 @@ class RecordingVoice:
 class RecordingHandoff:
     escalations: list[dict] = field(default_factory=list)
 
+    notifications: list[dict] = field(default_factory=list)
+
     def escalate(self, *, opportunity: Opportunity, reason: str, urgency: str, context_brief: str):
         self.escalations.append(
             {"opportunity": opportunity.id, "reason": reason, "urgency": urgency}
+        )
+
+    def notify_pending_approval(
+        self, *, opportunity: Opportunity, approval_id: str, channel: str, reason: str, preview: str
+    ) -> None:
+        self.notifications.append(
+            {"opportunity": opportunity.id, "approval_id": approval_id, "channel": channel}
         )
 
 

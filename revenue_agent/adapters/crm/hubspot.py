@@ -45,6 +45,7 @@ DEAL_PROPERTIES = [
     "closedate",
     "hs_lastmodifieddate",
     "hs_deal_stage_probability",
+    "hubspot_owner_id",
 ]
 CONTACT_PROPERTIES = ["email", "phone", "mobilephone", "firstname", "lastname", "jobtitle"]
 COMPANY_PROPERTIES = ["name", "domain", "industry", "numberofemployees"]
@@ -138,6 +139,7 @@ class HubSpotCrmAdapter:
             history=history,
             last_activity_at=_from_millis(properties.get("hs_lastmodifieddate")),
             source="hubspot",
+            owner_id=properties.get("hubspot_owner_id") or "",
         )
 
     def _batch_read(self, object_type: str, ids: list[str], properties: list[str]) -> dict:

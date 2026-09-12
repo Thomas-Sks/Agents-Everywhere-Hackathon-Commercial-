@@ -62,3 +62,15 @@ class ConsoleHandoffAdapter:
             reason,
             context_brief,
         )
+
+    def notify_pending_approval(
+        self, *, opportunity, approval_id: str, channel: str, reason: str, preview: str
+    ) -> None:
+        logger.warning(
+            "VALIDATION REQUISE [%s] — opportunité %s (%s)\nMotif : %s\n\n%s",
+            approval_id,
+            opportunity.id,
+            opportunity.company,
+            reason,
+            preview,
+        )

@@ -35,13 +35,28 @@ class VoicePort(Protocol):
 
 
 class HandoffPort(Protocol):
-    """Passage de relais à un commercial humain, avec l'intégralité du contexte.
+    """Atteindre un humain au sujet d'une opportunité.
 
-    Volontairement un port distinct : le handoff n'est pas « un message de plus », c'est un
-    moment produit à part entière (chapitre 10 du concept) dont la destination changera
-    (console aujourd'hui, Slack ou un espace de collaboration demain).
+    Volontairement un port distinct des canaux prospect : ici le destinataire est un collègue,
+    pas un client, et l'exigence n'est pas la même. Un message au prospect qui échoue peut être
+    réessayé plus tard ; **un handoff perdu est un deal abandonné sans que personne ne le
+    sache**. Toute implémentation doit donc garantir la remise, ou échouer bruyamment.
+
+    Deux moments distincts, tous deux destinés à un humain :
     """
 
     def escalate(
         self, *, opportunity: Opportunity, reason: str, urgency: str, context_brief: str
-    ) -> None: ...
+    ) -> None:
+        """Passage de relais complet : l'agent se retire, un commercial reprend le dossier."""
+        ...
+
+    def notify_pending_approval(
+        self, *, opportunity: Opportunity, approval_id: str, channel: str, reason: str, preview: str
+    ) -> None:
+        """Une action attend un arbitrage.
+
+        Sans cette notification, la file de validation ne serait consultée que par quelqu'un
+        qui pense à la consulter — et une action retenue resterait indéfiniment en attente.
+        """
+        ...

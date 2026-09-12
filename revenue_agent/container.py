@@ -15,15 +15,18 @@ from pathlib import Path
 
 from revenue_agent.adapters.approvals.json_file import JsonFileApprovalAdapter
 from revenue_agent.adapters.catalog.json_file import JsonFileCatalogAdapter
+from revenue_agent.adapters.communication.composite_handoff import CompositeHandoffAdapter
 from revenue_agent.adapters.communication.console import (
     ConsoleEmailAdapter,
     ConsoleHandoffAdapter,
     ConsoleVoiceAdapter,
     ConsoleWhatsAppAdapter,
 )
+from revenue_agent.adapters.communication.hubspot_handoff import HubSpotHandoffAdapter
 from revenue_agent.adapters.communication.meta_whatsapp import MetaWhatsAppAdapter
 from revenue_agent.adapters.communication.resend_email import ResendEmailAdapter
 from revenue_agent.adapters.communication.retell_voice import RetellVoiceAdapter
+from revenue_agent.adapters.communication.teams_handoff import TeamsHandoffAdapter
 from revenue_agent.adapters.crm.hubspot import HubSpotCrmAdapter
 from revenue_agent.adapters.crm.json_file import JsonFileCrmAdapter
 from revenue_agent.adapters.intelligence.composite_reviewer import LayeredMessageReviewer
@@ -43,6 +46,7 @@ from revenue_agent.application.run_decision_cycle import RunDecisionCycle
 from revenue_agent.application.scan_for_leads import ScanForLeads
 from revenue_agent.config import Settings
 from revenue_agent.ports.approvals import ApprovalPort
+from revenue_agent.ports.communication import HandoffPort
 from revenue_agent.ports.crm import CatalogPort, CrmPort
 from revenue_agent.ports.intelligence import DecisionAgentPort, MessageReviewPort
 from revenue_agent.ports.state import ScanStatePort
@@ -102,7 +106,7 @@ def build_container(settings: Settings | None = None) -> Container:
         if settings.retell.enabled
         else ConsoleVoiceAdapter()
     )
-    handoff = ConsoleHandoffAdapter()
+    handoff = _build_handoff(settings)
     enrichment = (
         ExaEnrichmentAdapter(settings.exa.api_key)
         if settings.exa.enabled
@@ -147,6 +151,37 @@ def build_container(settings: Settings | None = None) -> Container:
         ),
         handle_call_outcome=HandleCallOutcome(crm=crm, decision_cycle=decision_cycle),
     )
+
+
+def _build_handoff(settings: Settings) -> HandoffPort:
+    """Destinations réelles du passage de relais.
+
+    La console reste en dernier recours, jamais comme destination unique : c'est le geste le
+    plus important du produit, il ne peut pas se terminer dans un flux que personne ne lit.
+    """
+    destinations: list[HandoffPort] = []
+
+    if settings.hubspot.enabled:
+        # Une tâche assignée sur le deal : durable, et là où le commercial travaille déjà.
+        destinations.append(
+            HubSpotHandoffAdapter(settings.hubspot.token, settings.handoff.hubspot_owner_id)
+        )
+    if settings.handoff.teams_enabled:
+        # Le ping immédiat, avec le lien d'arbitrage.
+        destinations.append(
+            TeamsHandoffAdapter(
+                settings.handoff.teams_webhook_url, settings.handoff.approval_url
+            )
+        )
+
+    if not destinations:
+        logger.warning(
+            "Aucune destination de handoff configurée — les passages de relais et les "
+            "demandes de validation n'atteindront aucun humain hors des logs"
+        )
+        return ConsoleHandoffAdapter()
+
+    return CompositeHandoffAdapter(destinations, ConsoleHandoffAdapter())
 
 
 def _build_reviewer(settings: Settings) -> MessageReviewPort:

@@ -120,6 +120,31 @@ class RetellSettings:
 
 
 @dataclass(frozen=True)
+class HandoffSettings:
+    """Où atteindre un humain.
+
+    `public_base_url` est l'URL publique de cette API (tunnel ngrok en démo) : elle sert à
+    construire le lien d'arbitrage envoyé dans les notifications. Sans elle, un destinataire
+    reçoit l'information mais n'a aucun moyen d'agir.
+    """
+
+    teams_webhook_url: str = ""
+    hubspot_owner_id: str = ""
+    public_base_url: str = ""
+    approval_ui_token: str = ""
+
+    @property
+    def teams_enabled(self) -> bool:
+        return bool(self.teams_webhook_url)
+
+    def approval_url(self, approval_id: str = "") -> str:
+        if not self.public_base_url or not self.approval_ui_token:
+            return ""
+        base = f"{self.public_base_url.rstrip('/')}/approvals/ui?token={self.approval_ui_token}"
+        return f"{base}#{approval_id}" if approval_id else base
+
+
+@dataclass(frozen=True)
 class ExaSettings:
     api_key: str
 
@@ -187,6 +212,7 @@ class Settings:
     whatsapp: WhatsAppSettings
     retell: RetellSettings
     exa: ExaSettings
+    handoff: HandoffSettings
     scan: ScanSettings
     policy: PolicySettings
     state_file: str
@@ -220,6 +246,12 @@ class Settings:
                 webhook_secret=_env("RETELL_WEBHOOK_SECRET"),
             ),
             exa=ExaSettings(api_key=_env("EXA_API_KEY")),
+            handoff=HandoffSettings(
+                teams_webhook_url=_env("TEAMS_WEBHOOK_URL"),
+                hubspot_owner_id=_env("HUBSPOT_OWNER_ID"),
+                public_base_url=_env("PUBLIC_BASE_URL"),
+                approval_ui_token=_env("APPROVAL_UI_TOKEN"),
+            ),
             scan=ScanSettings(
                 overlap_minutes=_env_int("SCAN_OVERLAP_MINUTES", 5),
                 inactivity_days=_env_int("SCAN_INACTIVITY_DAYS", 14),
@@ -263,4 +295,6 @@ class Settings:
             degraded.append("voix (console)")
         if not self.exa.enabled:
             degraded.append("enrichissement web (désactivé)")
+        if not self.handoff.teams_enabled and not self.hubspot.enabled:
+            degraded.append("handoff (console — AUCUN humain n'est réellement prévenu)")
         return degraded

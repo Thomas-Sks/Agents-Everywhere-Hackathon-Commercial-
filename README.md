@@ -144,6 +144,24 @@ revenue-agent approvals approve <id>     # part tel quel, mot pour mot
 revenue-agent approvals reject <id> --note "trop tôt"
 ```
 
+### Sans terminal
+
+La ligne de commande n'est pas la surface d'arbitrage attendue d'un commercial. Quand l'agent
+retient une action, un humain est prévenu **immédiatement** — tâche HubSpot assignée au
+propriétaire du deal, message Teams, ou les deux — avec un lien vers une page d'arbitrage :
+le message exact qui partira, et deux boutons. Utilisable depuis un téléphone.
+
+Même chose pour `escalate_to_human` : le brief complet atterrit dans la file de tâches du
+commercial, associé au deal. Si toutes les destinations échouent, le brief est déversé dans les
+logs plutôt que perdu — **un handoff qui n'atteint personne est un deal abandonné en silence**.
+
+```bash
+export TEAMS_WEBHOOK_URL=...      # workflow Power Automate, pas d'OAuth
+export HUBSPOT_OWNER_ID=...       # propriétaire de repli
+export PUBLIC_BASE_URL=https://votre-tunnel.ngrok.app
+export APPROVAL_UI_TOKEN=...      # protège la page : elle déclenche de vrais envois
+```
+
 L'humain valide **ce qui partira réellement**, jamais un résumé. Tant qu'une action est dans
 cette file, rien n'est parti chez le prospect — et un refus laisse sa trace dans le CRM, au
 même titre qu'un envoi.
@@ -259,7 +277,8 @@ ngrok http 8000     # pour que Trigger.dev et Retell puissent nous atteindre
 | `POST /retell/tool-call` | Retell, pendant un appel | L'agent vocal exécute une action du registre |
 | `POST /retell/webhook` | Retell, fin d'appel | `call_analyzed` → transcript et résumé réinjectés dans la décision |
 | `POST /whatsapp/inbound` | Meta | Un message entrant relance un cycle de décision complet |
-| `GET /approvals` | opérateur | Actions en attente, avec le message exact qui partirait |
+| `GET /approvals/ui?token=` | opérateur | **Page d'arbitrage** : message exact et deux boutons |
+| `GET /approvals?token=` | opérateur | Les mêmes actions en JSON |
 | `POST /approvals/{id}/approve` · `/reject` | opérateur | Arbitrage |
 | `GET /health` | supervision | Mode d'autonomie, actions en attente, composants simulés |
 
@@ -351,11 +370,11 @@ l'écran :
 
 ```bash
 pip install -e ".[dev]"
-pytest          # 75 tests
+pytest          # 102 tests
 ruff check .
 ```
 
-**75 tests, aucun réseau, aucun appel de modèle, 0,7 seconde.** Ils couvrent le triage, le
+**102 tests, aucun réseau, aucun appel de modèle, 0,7 seconde.** Ils couvrent le triage, le
 routage par enjeu, la résolution de canal, la boucle de scan, la politique d'autonomie et la
 relecture des messages. Les tests de `test_policy.py` sont les plus importants du dépôt : ce sont
 eux qui vérifient ce qui empêche un message de partir.

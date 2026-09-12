@@ -112,6 +112,8 @@ class Opportunity:
     risk_notes: str = ""
     last_activity_at: datetime | None = None
     source: str = "local"
+    # Commercial responsable du dossier côté CRM — destinataire naturel d'un handoff.
+    owner_id: str = ""
 
     def reachable_channels(self) -> ReachableChannels:
         """Première coordonnée disponible, en privilégiant le champion puis le décideur."""
