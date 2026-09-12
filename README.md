@@ -159,7 +159,11 @@ externe.
 git clone <url-du-dépôt> && cd Agents-Everywhere-Hackathon-Commercial-
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env        # toutes les variables sont commentées et optionnelles
 ```
+
+Le fichier `.env` est chargé automatiquement, sans jamais écraser une variable déjà exportée
+dans le shell : une valeur oubliée en local ne peut pas contaminer un déploiement.
 
 ### Lancer sans aucune clé (recommandé pour découvrir)
 
