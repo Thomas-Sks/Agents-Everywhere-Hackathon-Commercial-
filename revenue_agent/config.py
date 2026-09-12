@@ -38,7 +38,7 @@ def _env_float(name: str, default: float) -> float:
     try:
         return float(raw)
     except ValueError as exc:
-        raise ConfigurationError(f"{name} doit être un nombre, reçu : {raw!r}") from exc
+        raise ConfigurationError(f"{name} must be a number, got: {raw!r}") from exc
 
 
 def _env_list(name: str) -> tuple[str, ...]:
@@ -51,7 +51,7 @@ def _parse_mode(raw: str):
         return AgentMode(raw.lower())
     except ValueError as exc:
         valid = ", ".join(mode.value for mode in AgentMode)
-        raise ConfigurationError(f"AGENT_MODE invalide : {raw!r}. Valeurs : {valid}") from exc
+        raise ConfigurationError(f"Invalid AGENT_MODE: {raw!r}. Valid values: {valid}") from exc
 
 
 def _env_int(name: str, default: int) -> int:
@@ -61,7 +61,7 @@ def _env_int(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError as exc:
-        raise ConfigurationError(f"{name} doit être un entier, reçu : {raw!r}") from exc
+        raise ConfigurationError(f"{name} must be an integer, got: {raw!r}") from exc
 
 
 @dataclass(frozen=True)
@@ -227,7 +227,7 @@ class Settings:
     def from_env(cls) -> Settings:
         _load_dotenv()
         settings = cls(
-            company_name=_env("COMPANY_NAME", "Notre Entreprise"),
+            company_name=_env("COMPANY_NAME", "Our Company"),
             openrouter=OpenRouterSettings(
                 api_key=_env("OPENROUTER_API_KEY"),
                 base_url=_env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
@@ -279,32 +279,32 @@ class Settings:
 
     def validate(self) -> None:
         if self.scan.overlap_minutes < 0:
-            raise ConfigurationError("SCAN_OVERLAP_MINUTES ne peut pas être négatif")
+            raise ConfigurationError("SCAN_OVERLAP_MINUTES cannot be negative")
         if self.scan.max_decisions_per_scan < 1:
-            raise ConfigurationError("SCAN_MAX_DECISIONS doit valoir au moins 1")
+            raise ConfigurationError("SCAN_MAX_DECISIONS must be at least 1")
         if not 1 <= self.scan.page_size <= 200:
-            raise ConfigurationError("SCAN_PAGE_SIZE doit être compris entre 1 et 200")
+            raise ConfigurationError("SCAN_PAGE_SIZE must be between 1 and 200")
 
     def degraded_components(self) -> list[str]:
         """Components running in simulated mode for lack of configuration — displayed at
         start-up so a demo never believes itself wired up when it is not."""
         degraded = []
         if not self.openrouter.enabled:
-            degraded.append("LLM (agent scripté, aucune décision réelle)")
+            degraded.append("LLM (scripted agent, no real decisions)")
         if not self.hubspot.enabled:
-            degraded.append("CRM (mémoire locale JSON)")
+            degraded.append("CRM (local JSON memory)")
         if not self.resend.enabled:
             degraded.append("email (console)")
         if not self.whatsapp.enabled:
             degraded.append("WhatsApp (console)")
         if not self.retell.enabled:
-            degraded.append("voix (console)")
+            degraded.append("voice (console)")
         if not self.exa.enabled:
-            degraded.append("enrichissement web (désactivé)")
+            degraded.append("web enrichment (disabled)")
         if (
             not self.handoff.teams_enabled
             and not self.hubspot.enabled
             and not (self.handoff.whatsapp_enabled and self.whatsapp.enabled)
         ):
-            degraded.append("handoff (console — AUCUN humain n'est réellement prévenu)")
+            degraded.append("handoff (console — NO human is actually notified)")
         return degraded

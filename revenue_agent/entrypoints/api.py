@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     settings = Settings.from_env()
     configure_logging(settings.log_level)
     _container = build_container(settings)
-    logger.info("Autonomous Revenue Agent démarré pour %s", settings.company_name)
+    logger.info("Autonomous Revenue Agent started for %s", settings.company_name)
     yield
     _container = None
 
@@ -64,11 +64,11 @@ async def health() -> dict:
     settings = current.settings
     return {
         "status": "ok",
-        "entreprise": settings.company_name,
-        "mode_autonomie": settings.policy.mode.value,
-        "seuil_autonomie_eur": settings.policy.max_autonomous_amount,
-        "actions_en_attente": len(current.review_approval.list_pending()),
-        "composants_simules": settings.degraded_components(),
+        "company": settings.company_name,
+        "autonomy_mode": settings.policy.mode.value,
+        "autonomy_threshold_eur": settings.policy.max_autonomous_amount,
+        "pending_actions": len(current.review_approval.list_pending()),
+        "simulated_components": settings.degraded_components(),
     }
 
 
@@ -85,7 +85,7 @@ def _approval_access_ok(current: Container, token: str | None) -> bool:
     """
     expected = current.settings.handoff.approval_ui_token
     if not expected:
-        logger.warning("APPROVAL_UI_TOKEN non configuré — les routes d'arbitrage sont ouvertes")
+        logger.warning("APPROVAL_UI_TOKEN not configured — the arbitration routes are open")
         return True
     return bool(token and hmac.compare_digest(token, expected))
 
@@ -98,20 +98,20 @@ async def list_approvals(token: str | None = None) -> JSONResponse:
     """
     current = container()
     if not _approval_access_ok(current, token):
-        return JSONResponse({"detail": "Accès refusé"}, status_code=401)
+        return JSONResponse({"detail": "Access denied"}, status_code=401)
     pending = current.review_approval.list_pending()
     return JSONResponse(
         [
             {
                 "id": approval.id,
                 "opportunity": approval.opportunity_id,
-                "entreprise": approval.company,
-                "canal": approval.kind.value,
-                "destinataire": approval.recipient,
-                "regle": approval.rule,
-                "motif": approval.reason,
-                "demandee_le": approval.requested_at.isoformat(),
-                "contenu": approval.payload,
+                "company": approval.company,
+                "channel": approval.kind.value,
+                "recipient": approval.recipient,
+                "rule": approval.rule,
+                "reason": approval.reason,
+                "requested_at": approval.requested_at.isoformat(),
+                "payload": approval.payload,
             }
             for approval in pending
         ]
@@ -127,7 +127,7 @@ async def approvals_ui(token: str | None = None) -> Response:
     """
     current = container()
     if not _approval_access_ok(current, token):
-        return HTMLResponse("<p>Lien d'arbitrage invalide ou expiré.</p>", status_code=401)
+        return HTMLResponse("<p>Invalid or expired arbitration link.</p>", status_code=401)
 
     return HTMLResponse(
         render_approval_page(
@@ -142,24 +142,24 @@ async def approvals_ui(token: str | None = None) -> Response:
 async def approve(approval_id: str, request: Request, token: str | None = None) -> JSONResponse:
     current = container()
     if not _approval_access_ok(current, token):
-        return JSONResponse({"detail": "Accès refusé"}, status_code=401)
+        return JSONResponse({"detail": "Access denied"}, status_code=401)
     body = _safe_json(await request.body())
     result = current.review_approval.approve(
         approval_id, body.get("reviewer", "api"), body.get("note", "")
     )
-    return JSONResponse({"resultat": result})
+    return JSONResponse({"result": result})
 
 
 @app.post("/approvals/{approval_id}/reject")
 async def reject(approval_id: str, request: Request, token: str | None = None) -> JSONResponse:
     current = container()
     if not _approval_access_ok(current, token):
-        return JSONResponse({"detail": "Accès refusé"}, status_code=401)
+        return JSONResponse({"detail": "Access denied"}, status_code=401)
     body = _safe_json(await request.body())
     result = current.review_approval.reject(
         approval_id, body.get("reviewer", "api"), body.get("note", "")
     )
-    return JSONResponse({"resultat": result})
+    return JSONResponse({"result": result})
 
 
 # -- Periodic scan -----------------------------------------------------------------
@@ -173,13 +173,13 @@ async def scan(x_scan_token: str | None = Header(default=None)) -> JSONResponse:
     expected = current.settings.scan.shared_secret
 
     if expected and not (x_scan_token and hmac.compare_digest(x_scan_token, expected)):
-        return JSONResponse({"detail": "Jeton de scan invalide"}, status_code=401)
+        return JSONResponse({"detail": "Invalid scan token"}, status_code=401)
     if not expected:
-        logger.warning("SCAN_SHARED_SECRET non configuré — endpoint /scan non protégé")
+        logger.warning("SCAN_SHARED_SECRET not configured — the /scan endpoint is unprotected")
 
     report = current.scan_for_leads.execute()
     logger.info(
-        "Scan terminé : %s deal(s) examiné(s), %s détecté(s), %s traité(s)",
+        "Scan complete: %s deal(s) examined, %s detected, %s processed",
         report.scanned_deals,
         report.detected,
         len(report.processed),
@@ -203,7 +203,7 @@ async def retell_tool_call(
     raw_body = await request.body()
 
     if not _retell_signature_ok(current, raw_body, x_retell_signature):
-        return JSONResponse({"detail": "Signature invalide"}, status_code=401)
+        return JSONResponse({"detail": "Invalid signature"}, status_code=401)
 
     payload = _safe_json(raw_body)
     name = payload.get("name") or payload.get("function_name")
@@ -211,14 +211,14 @@ async def retell_tool_call(
 
     action = _RETELL_ACTIONS.get(name)
     if action is None:
-        logger.warning("Tool inconnu demandé par Retell : %s", name)
-        return JSONResponse({"result": f"Action inconnue : {name}"}, status_code=404)
+        logger.warning("Unknown tool requested by Retell: %s", name)
+        return JSONResponse({"result": f"Unknown action: {name}"}, status_code=404)
 
     try:
         result = action(current, args)
     except RevenueAgentError as exc:
-        logger.warning("Action %s en échec pendant un appel : %s", name, exc)
-        return JSONResponse({"result": f"ERREUR : {exc}"})
+        logger.warning("Action %s failed during a call: %s", name, exc)
+        return JSONResponse({"result": f"ERROR: {exc}"})
 
     return JSONResponse({"result": result})
 
@@ -235,18 +235,18 @@ async def retell_webhook(
     raw_body = await request.body()
 
     if not _retell_signature_ok(current, raw_body, x_retell_signature):
-        return JSONResponse({"detail": "Signature invalide"}, status_code=401)
+        return JSONResponse({"detail": "Invalid signature"}, status_code=401)
 
     payload = _safe_json(raw_body)
     event = payload.get("event")
     if event != "call_analyzed":
-        return JSONResponse({"status": "ignoré", "event": event})
+        return JSONResponse({"status": "ignored", "event": event})
 
     call = payload.get("call", {})
     opportunity_id = (call.get("metadata") or {}).get("opportunity_id")
     if not opportunity_id:
-        logger.warning("Appel Retell sans opportunity_id dans metadata — ignoré")
-        return JSONResponse({"status": "ignoré", "reason": "opportunity_id absent"})
+        logger.warning("Retell call with no opportunity_id in metadata — ignored")
+        return JSONResponse({"status": "ignored", "reason": "missing opportunity_id"})
 
     analysis = call.get("call_analysis") or {}
     outcome = CallOutcome(
@@ -261,7 +261,7 @@ async def retell_webhook(
     # Background processing: the decision cycle can take several seconds, and Retell
     # expects a fast acknowledgement.
     background_tasks.add_task(current.handle_call_outcome.execute, outcome)
-    return JSONResponse({"status": "accepté", "opportunity": opportunity_id})
+    return JSONResponse({"status": "accepted", "opportunity": opportunity_id})
 
 
 # -- WhatsApp ----------------------------------------------------------------------
@@ -276,7 +276,7 @@ async def whatsapp_verify(request: Request) -> Response:
 
     if expected and provided and hmac.compare_digest(provided, expected):
         return PlainTextResponse(params.get("hub.challenge", ""))
-    return JSONResponse({"detail": "Jeton de vérification invalide"}, status_code=403)
+    return JSONResponse({"detail": "Invalid verify token"}, status_code=403)
 
 
 @app.post("/whatsapp/inbound")
@@ -287,20 +287,20 @@ async def whatsapp_inbound(request: Request, background_tasks: BackgroundTasks) 
 
     message = _extract_whatsapp_message(payload)
     if message is None:
-        return JSONResponse({"status": "ignoré"})
+        return JSONResponse({"status": "ignored"})
 
     phone, text = message
     opportunity_id = _resolve_opportunity_by_phone(current, phone)
     if opportunity_id is None:
-        logger.warning("Message WhatsApp de %s — aucune opportunité correspondante", phone)
-        return JSONResponse({"status": "ignoré", "reason": "prospect inconnu"})
+        logger.warning("WhatsApp message from %s — no matching opportunity", phone)
+        return JSONResponse({"status": "ignored", "reason": "unknown prospect"})
 
     background_tasks.add_task(
         current.decision_cycle.execute_safely,
         opportunity_id,
-        f"Message WhatsApp reçu du prospect : « {text} »",
+        f'WhatsApp message received from the prospect: "{text}"',
     )
-    return JSONResponse({"status": "accepté", "opportunity": opportunity_id})
+    return JSONResponse({"status": "accepted", "opportunity": opportunity_id})
 
 
 # -- Helpers -----------------------------------------------------------------------
@@ -351,7 +351,7 @@ _RETELL_ACTIONS: dict[str, Any] = {
 def _retell_signature_ok(current: Container, body: bytes, signature: str | None) -> bool:
     secret = current.settings.retell.webhook_secret
     if not secret:
-        logger.warning("RETELL_WEBHOOK_SECRET non configuré — signature non vérifiée")
+        logger.warning("RETELL_WEBHOOK_SECRET not configured — signature not verified")
         return True
     return verify_signature(payload=body, signature=signature, secret=secret)
 
@@ -362,7 +362,7 @@ def _safe_json(body: bytes) -> dict:
     try:
         payload = json.loads(body or b"{}")
     except ValueError:
-        logger.warning("Payload non-JSON reçu")
+        logger.warning("Received a non-JSON payload")
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -386,5 +386,5 @@ def _resolve_opportunity_by_phone(current: Container, phone: str) -> str | None:
     try:
         return current.crm.find_opportunity_by_phone(phone)
     except RevenueAgentError:
-        logger.exception("Impossible de résoudre l'opportunité pour le numéro %s", phone)
+        logger.exception("Could not resolve the opportunity for number %s", phone)
         return None

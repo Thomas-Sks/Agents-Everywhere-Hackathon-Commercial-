@@ -46,8 +46,8 @@ def _guard(func: Callable[..., str]) -> Callable[..., str]:
         try:
             return func(*args, **kwargs)
         except (AdapterError, RevenueAgentError) as exc:
-            logger.warning("Tool %s en échec : %s", func.__name__, exc)
-            return f"ERREUR : {exc}. Adapte ta décision en conséquence."
+            logger.warning("Tool %s failed: %s", func.__name__, exc)
+            return f"ERROR: {exc}. Adapt your decision accordingly."
 
     return wrapper
 
@@ -67,10 +67,10 @@ class LangGraphDecisionAgent:
             else self._settings.openrouter.model_routine
         )
         logger.info(
-            "Cycle de décision — opportunité %s, modèle %s (%s)",
+            "Decision cycle — opportunity %s, model %s (%s)",
             opportunity.id,
             model_name,
-            "stratégique" if strategic else "routine",
+            "strategic" if strategic else "routine",
         )
 
         result = self._agent_for(model_name).invoke(
@@ -198,17 +198,16 @@ class LangGraphDecisionAgent:
             role: str = "",
             notes: str = "",
         ) -> str:
-            """Consigner qui décide, qui influence, qui bloque. Une vente complexe échoue
-            rarement à cause du produit seul : tiens cette carte à jour dès que tu apprends
-            le rôle réel de quelqu'un, y compris pour une personne jamais contactée dont on
-            t'a seulement parlé.
+            """Record who decides, who influences, who blocks. A complex sale rarely fails on
+            the product alone: keep this map up to date as soon as you learn someone's real
+            role, including for a person you have never contacted and were only told about.
 
             Args:
-                opportunity_id: Identifiant de l'opportunité.
-                name: Nom de la personne, tel qu'il apparaît dans le CRM si elle y figure.
-                stance: "champion", "decision_maker", "blocker", "neutral" ou "inconnu".
-                role: Fonction dans l'entreprise, si connue.
-                notes: Ce qui justifie cette posture, en une phrase.
+                opportunity_id: Identifier of the opportunity.
+                name: The person's name, as it appears in the CRM if they are in it.
+                stance: "champion", "decision_maker", "blocker", "neutral" or "unknown".
+                role: Their function in the company, if known.
+                notes: What justifies this stance, in one sentence.
             """
             return actions.update_stakeholder(opportunity_id, name, stance, role, notes)
 
@@ -317,14 +316,14 @@ class LangGraphDecisionAgent:
 
 def _build_user_message(opportunity: Opportunity, event: str) -> str:
     channels = opportunity.reachable_channels()
-    available = ", ".join(channel.value for channel in channels.available) or "aucun"
+    available = ", ".join(channel.value for channel in channels.available) or "none"
     return (
-        f"Nouvel événement sur l'opportunité '{opportunity.id}' ({opportunity.company}) :\n\n"
+        f"New event on opportunity '{opportunity.id}' ({opportunity.company}):\n\n"
         f"{event}\n\n"
-        f"Canaux réellement disponibles pour ce prospect : {available}.\n"
-        "Relis d'abord l'état complet de l'opportunité, puis décide et exécute la meilleure "
-        "action commerciale maintenant — ou justifie explicitement pourquoi attendre, en "
-        "programmant la reprise."
+        f"Channels actually available for this prospect: {available}.\n"
+        "Reread the full state of the opportunity first, then decide and carry out the best "
+        "commercial action now — or explicitly justify why you are waiting, scheduling the "
+        "follow-up."
     )
 
 

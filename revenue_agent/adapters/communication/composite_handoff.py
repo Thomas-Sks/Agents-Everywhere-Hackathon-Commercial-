@@ -39,8 +39,8 @@ class CompositeHandoffAdapter:
         )
         if not delivered:
             logger.error(
-                "HANDOFF NON REMIS — aucune destination n'a accepté le brief de l'opportunité %s. "
-                "Il est reproduit ci-dessous pour ne pas être perdu.",
+                "HANDOFF NOT DELIVERED — no destination accepted the brief for opportunity %s. "
+                "It is reproduced below so it is not lost.",
                 opportunity.id,
             )
             self._fallback.escalate(
@@ -65,8 +65,8 @@ class CompositeHandoffAdapter:
         )
         if not delivered:
             logger.error(
-                "Notification de validation non remise pour %s — l'action %s reste en attente "
-                "sans que personne n'en soit informé.",
+                "Approval notification not delivered for %s — action %s remains pending with "
+                "nobody informed.",
                 opportunity.id,
                 approval_id,
             )
@@ -87,7 +87,7 @@ class CompositeHandoffAdapter:
                 delivered = True
             except Exception:  # noqa: BLE001 - une destination en panne n'en condamne pas une autre
                 logger.exception(
-                    "Destination %s en échec pour %s",
+                    "Destination %s failed for %s",
                     type(destination).__name__,
                     operation,
                 )

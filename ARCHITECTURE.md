@@ -30,7 +30,7 @@ composition root (`container.py`) picks either `HubSpotCrmAdapter` or `JsonFileC
 either `ResendEmailAdapter` or `ConsoleEmailAdapter`. The domain is unaware of the arbitration,
 and the code path exercised in a demo is the same one that runs in production.
 
-**Tests run without a network.** 102 tests cover triage, stakes-based routing, channel
+**Tests run without a network.** 115 tests cover triage, stakes-based routing, channel
 resolution, the scan loop, the autonomy policy and message review — in under a second, without
 HubSpot, without an LLM. That is the objective measure that the business logic really is
 decoupled.
@@ -97,13 +97,13 @@ execution, inside `ActionRegistry._guard`:
 
 | Rule | Verdict | What it prevents |
 |---|---|---|
-| `mode_dry_run` | blocked | Any send at all, in rehearsal or under test |
-| `destinataire_hors_liste` | blocked | Writing to a real prospect during a demo |
-| `prix_hors_catalogue` | blocked | A hallucinated price committing the company |
-| `cadence_maximale` | blocked | Harassing a prospect |
-| `mode_supervise` | approval | Any action, as long as autonomy has not been granted |
-| `relecture_*` | approval | Anything a sales director would not let out the door |
-| `montant_eleve` | approval | A large deal being played out without supervision |
+| `dry_run_mode` | blocked | Any send at all, in rehearsal or under test |
+| `recipient_not_allowed` | blocked | Writing to a real prospect during a demo |
+| `price_not_in_catalogue` | blocked | A hallucinated price committing the company |
+| `rate_limit` | blocked | Harassing a prospect |
+| `supervised_mode` | approval | Any action, as long as autonomy has not been granted |
+| `review_*` | approval | Anything a sales director would not let out the door |
+| `high_amount` | approval | A large deal being played out without supervision |
 
 Three properties here are deliberate:
 

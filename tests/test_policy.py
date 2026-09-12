@@ -22,7 +22,9 @@ from revenue_agent.domain.review import MessageUnderReview
 CATALOGUE = (550.0, 4800.0, 22000.0)
 
 
-def action(content: str = "Hello, would you be available on Tuesday?", **overrides) -> OutboundAction:
+def action(
+    content: str = "Hello, would you be available on Tuesday?", **overrides
+) -> OutboundAction:
     defaults = {
         "kind": ActionKind.EMAIL,
         "opportunity_id": "acme-co",

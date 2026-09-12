@@ -191,8 +191,8 @@ def _build_handoff(settings: Settings, whatsapp: WhatsAppPort) -> HandoffPort:
 
     if not destinations:
         logger.warning(
-            "Aucune destination de handoff configurée — les passages de relais et les "
-            "demandes de validation n'atteindront aucun humain hors des logs"
+            "No handoff destination configured — handoffs and approval requests will not "
+            "reach any human outside the logs"
         )
         return ConsoleHandoffAdapter()
 
@@ -210,8 +210,8 @@ def _build_reviewer(settings: Settings) -> MessageReviewPort:
     lexical = LexicalMessageReviewer()
     if not settings.openrouter.enabled:
         logger.warning(
-            "Relecture sémantique indisponible (pas de clé OpenRouter) — "
-            "seul le socle lexical protège les envois"
+            "Semantic review unavailable (no OpenRouter key) — "
+            "only the lexical baseline protects outbound messages"
         )
         return LayeredMessageReviewer(lexical=lexical, semantic=None)
 
@@ -238,6 +238,6 @@ def _build_agent(
 def _log_wiring(settings: Settings) -> None:
     degraded = settings.degraded_components()
     if degraded:
-        logger.warning("Composants en mode simulé : %s", " ; ".join(degraded))
+        logger.warning("Components in simulated mode: %s", " ; ".join(degraded))
     else:
-        logger.info("Toutes les intégrations sont configurées.")
+        logger.info("All integrations are configured.")

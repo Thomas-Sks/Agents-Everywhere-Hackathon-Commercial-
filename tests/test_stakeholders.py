@@ -38,7 +38,7 @@ def test_the_agent_can_record_a_stance(harness, crm):
 
 
 def test_a_never_contacted_person_enters_the_map(harness, crm):
-    """Le CFO qui valide le budget compte, même sans coordonnées — c'est souvent lui qui
+    """The CFO who signs off the budget counts, even without contact details — c'est souvent lui qui
     décide du sort de l'affaire."""
     harness.registry.update_stakeholder("acme-co", "Marc Dubois", "decision_maker")
 
@@ -106,11 +106,11 @@ def test_a_stance_written_as_a_note_is_read_back_on_the_next_scan():
     merged = _merge_stances((Stakeholder(name="Julie Martin", email="j@acme.test"),), stances)
 
     assert merged[0].stance is Stance.CHAMPION
-    assert merged[0].email == "j@acme.test", "la coordonnée HubSpot ne doit pas être perdue"
+    assert merged[0].email == "j@acme.test", "the HubSpot contact detail must not be lost"
 
 
 def test_the_most_recent_note_wins():
-    """Une posture évolue : neutral, puis champion, puis blocker quand le budget est refusé."""
+    """A stance moves: neutral, then champion, then blocker once the budget is refused."""
     _, _, stances = _parse_notes(
         {
             "1": note("[STAKEHOLDER] Julie Martin | stance: champion", 2_000),

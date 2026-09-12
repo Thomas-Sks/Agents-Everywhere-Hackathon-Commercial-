@@ -17,16 +17,28 @@ from revenue_agent.domain.review import MessageUnderReview, ReviewCategory, Revi
 SOURCE = "lexical"
 
 _PATTERNS: tuple[tuple[str, ReviewCategory, str], ...] = (
-    (r"\bdiscount(s|ed|ing)?\b", ReviewCategory.PRICE_COMMITMENT, "The message offers a discount."),
+    (
+        r"\bdiscount(s|ed|ing)?\b",
+        ReviewCategory.PRICE_COMMITMENT,
+        "The message offers a discount.",
+    ),
     (r"\brebate\b", ReviewCategory.PRICE_COMMITMENT, "The message offers a rebate."),
-    (r"\bmark(ed)?\s*down\b", ReviewCategory.PRICE_COMMITMENT, "The message marks the price down."),
+    (
+        r"\bmark(ed)?\s*down\b",
+        ReviewCategory.PRICE_COMMITMENT,
+        "The message marks the price down.",
+    ),
     (r"\bwaive[ds]?\b", ReviewCategory.PRICE_COMMITMENT, "The message waives a charge."),
     (
         r"\bfree\s+of\s+charge\b",
         ReviewCategory.PRICE_COMMITMENT,
         "The message promises something free of charge.",
     ),
-    (r"\bat\s+no\s+cost\b", ReviewCategory.PRICE_COMMITMENT, "The message promises something at no cost."),
+    (
+        r"\bat\s+no\s+cost\b",
+        ReviewCategory.PRICE_COMMITMENT,
+        "The message promises something at no cost.",
+    ),
     (
         r"\bon\s+the\s+house\b",
         ReviewCategory.PRICE_COMMITMENT,

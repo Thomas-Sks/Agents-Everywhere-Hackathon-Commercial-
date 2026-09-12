@@ -53,27 +53,27 @@ button:disabled { opacity:.5; cursor:default; }
 """
 
 _SCRIPT = """
-async function arbitrer(id, verdict, bouton) {
-  const carte = document.getElementById(id);
-  carte.querySelectorAll('button').forEach(b => b.disabled = true);
-  bouton.textContent = 'En cours…';
+async function arbitrate(id, verdict, button) {
+  const card = document.getElementById(id);
+  card.querySelectorAll('button').forEach(b => b.disabled = true);
+  button.textContent = 'Working…';
   try {
-    const reponse = await fetch(
-      `/approvals/${id}/${verdict}?token=${encodeURIComponent(JETON)}`,
+    const response = await fetch(
+      `/approvals/${id}/${verdict}?token=${encodeURIComponent(TOKEN)}`,
       { method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewer: 'page d\\'arbitrage' }) }
+        body: JSON.stringify({ reviewer: 'arbitration page' }) }
     );
-    const donnees = await reponse.json();
-    carte.innerHTML = '<div class="done">' + escapeHtml(donnees.resultat ?? 'Terminé.') + '</div>';
-  } catch (erreur) {
-    bouton.textContent = 'Échec — réessayer';
-    carte.querySelectorAll('button').forEach(b => b.disabled = false);
+    const data = await response.json();
+    card.innerHTML = '<div class="done">' + escapeHtml(data.result ?? 'Done.') + '</div>';
+  } catch (error) {
+    button.textContent = 'Failed — retry';
+    card.querySelectorAll('button').forEach(b => b.disabled = false);
   }
 }
-function escapeHtml(texte) {
+function escapeHtml(text) {
   const d = document.createElement('div');
-  d.textContent = texte;
+  d.textContent = text;
   return d.innerHTML;
 }
 """
@@ -84,32 +84,32 @@ def render(approvals: list[PendingApproval], token: str, company_name: str) -> s
     if approvals:
         cards = "\n".join(_card(approval) for approval in approvals)
         count = (
-            f"{len(approvals)} action en attente"
+            f"{len(approvals)} action pending"
             if len(approvals) == 1
-            else f"{len(approvals)} actions en attente"
+            else f"{len(approvals)} actions pending"
         )
     else:
         cards = (
-            '<p class="empty">Aucune action en attente.<br>'
-            "L\'agent n\'a rien à faire valider.</p>"
+            '<p class="empty">No action pending.<br>'
+            "The agent has nothing awaiting approval.</p>"
         )
-        count = "File vide"
+        count = "Empty queue"
 
     return f"""<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Arbitrage — {escape(company_name)}</title>
+<title>Arbitration — {escape(company_name)}</title>
 <style>{_STYLE}</style>
 </head>
 <body>
 <main>
-  <h1>Actions en attente de validation</h1>
-  <p class="count">{escape(count)} · rien n'est parti chez le prospect</p>
+  <h1>Actions awaiting approval</h1>
+  <p class="count">{escape(count)} · nothing has reached the prospect</p>
   {cards}
 </main>
-<script>const JETON = {_json_string(token)};{_SCRIPT}</script>
+<script>const TOKEN = {_json_string(token)};{_SCRIPT}</script>
 </body>
 </html>"""
 
@@ -118,11 +118,11 @@ def _card(approval: PendingApproval) -> str:
     payload = approval.payload
     details = []
     if payload.get("subject"):
-        details.append(f"<dt>Objet</dt><dd>{escape(payload['subject'])}</dd>")
+        details.append(f"<dt>Subject</dt><dd>{escape(payload['subject'])}</dd>")
 
     corps = payload.get("body") or payload.get("message") or payload.get("objective") or ""
     if corps:
-        label = "Objectif de l'appel" if payload.get("objective") else "Message"
+        label = "Call objective" if payload.get("objective") else "Message"
         details.append(f"<dt>{label}</dt><dd><pre>{escape(corps)}</pre></dd>")
 
     return f"""
@@ -134,11 +134,11 @@ def _card(approval: PendingApproval) -> str:
     <div class="why">{escape(approval.reason)}</div>
     <dl>{"".join(details)}</dl>
     <div class="actions">
-      <button class="ok" onclick="arbitrer('{escape(approval.id)}', 'approve', this)">
-        Approuver et envoyer
+      <button class="ok" onclick="arbitrate('{escape(approval.id)}', 'approve', this)">
+        Approve and send
       </button>
-      <button class="no" onclick="arbitrer('{escape(approval.id)}', 'reject', this)">
-        Rejeter
+      <button class="no" onclick="arbitrate('{escape(approval.id)}', 'reject', this)">
+        Reject
       </button>
     </div>
   </article>"""

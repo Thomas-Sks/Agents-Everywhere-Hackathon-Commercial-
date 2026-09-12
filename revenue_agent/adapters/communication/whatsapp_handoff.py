@@ -44,9 +44,9 @@ class WhatsAppHandoffAdapter:
         self, *, opportunity: Opportunity, reason: str, urgency: str, context_brief: str
     ) -> None:
         self._broadcast(
-            f"🤝 *Reprise nécessaire — {opportunity.company}*\n"
-            f"Urgence {urgency} · stade {opportunity.stage}\n\n"
-            f"*Motif* : {reason}\n\n"
+            f"🤝 *Handover needed — {opportunity.company}*\n"
+            f"Urgency {urgency} · stage {opportunity.stage}\n\n"
+            f"*Reason*: {reason}\n\n"
             f"{_truncate(context_brief)}"
             + _link_line(self._approval_url(""))
         )
@@ -55,10 +55,10 @@ class WhatsAppHandoffAdapter:
         self, *, opportunity: Opportunity, approval_id: str, channel: str, reason: str, preview: str
     ) -> None:
         self._broadcast(
-            f"⏸️ *Validation requise — {opportunity.company}*\n"
-            f"Action {channel} retenue · réf. {approval_id}\n\n"
-            f"*Motif* : {reason}\n\n"
-            f"_Message retenu :_\n{_truncate(preview)}"
+            f"⏸️ *Approval required — {opportunity.company}*\n"
+            f"{channel} action held · ref. {approval_id}\n\n"
+            f"*Reason*: {reason}\n\n"
+            f"_Message held:_\n{_truncate(preview)}"
             + _link_line(self._approval_url(approval_id))
         )
 

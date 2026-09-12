@@ -150,7 +150,7 @@ def test_bare_json():
 def test_json_inside_a_code_block():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
-    payload = _extract_json('Voici mon verdict :\n```json\n{"requires_human": true}\n```')
+    payload = _extract_json('Here is my verdict:\n```json\n{"requires_human": true}\n```')
 
     assert payload == {"requires_human": True}
 
@@ -158,7 +158,7 @@ def test_json_inside_a_code_block():
 def test_json_buried_in_prose():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
-    payload = _extract_json('Après relecture, {"requires_human": true} me semble juste.')
+    payload = _extract_json('After review, {"requires_human": true} seems right.')
 
     assert payload == {"requires_human": True}
 
@@ -166,12 +166,12 @@ def test_json_buried_in_prose():
 def test_an_unreadable_response_does_not_guess_a_verdict():
     from revenue_agent.adapters.intelligence.llm_reviewer import _extract_json
 
-    assert _extract_json("Je ne peux pas répondre.") is None
+    assert _extract_json("I cannot answer that.") is None
 
 
 def test_an_unknown_category_does_not_crash():
     from revenue_agent.adapters.intelligence.llm_reviewer import _parse_category
 
-    assert _parse_category("catégorie_inventée_par_le_modèle") is ReviewCategory.NONE
+    assert _parse_category("category_invented_by_the_model") is ReviewCategory.NONE
     assert _parse_category(None) is ReviewCategory.NONE
     assert _parse_category("price_commitment") is ReviewCategory.PRICE_COMMITMENT

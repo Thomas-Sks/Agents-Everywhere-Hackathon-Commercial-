@@ -132,7 +132,7 @@ def test_a_resolution_only_closes_the_objection_it_targets():
 
 
 def test_a_resolution_note_is_not_read_as_history():
-    objections, history, _ = _parse_notes({"1": note("[OBJECTION-RESOLVED:aaa] Réglé")})
+    objections, history, _ = _parse_notes({"1": note("[OBJECTION-RESOLVED:aaa] Settled")})
 
     assert objections == ()
     assert history == (), "a resolution must not pollute the interaction history"

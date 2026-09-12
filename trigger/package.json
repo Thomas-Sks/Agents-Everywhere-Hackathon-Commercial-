@@ -2,7 +2,7 @@
   "name": "revenue-agent-trigger",
   "version": "1.0.0",
   "private": true,
-  "description": "Cadence autonome de l'Autonomous Revenue Agent — scan périodique du CRM et relances durables",
+  "description": "Autonomous cadence for the Autonomous Revenue Agent — periodic CRM scan and durable follow-ups",
   "type": "module",
   "scripts": {
     "dev": "trigger.dev dev",

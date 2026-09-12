@@ -47,7 +47,7 @@ class LlmMessageReviewer:
             temperature=0,
             timeout=20,
             max_retries=1,
-            default_headers={"X-Title": "Autonomous Revenue Agent — relecture"},
+            default_headers={"X-Title": "Autonomous Revenue Agent — review"},
         )
         self._system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
 
@@ -61,21 +61,21 @@ class LlmMessageReviewer:
             )
             payload = _extract_json(_as_text(response.content))
         except Exception as exc:  # noqa: BLE001 - any failure must close, never open
-            logger.warning("Relecture indisponible (%s) — le message est retenu", exc)
+            logger.warning("Review unavailable (%s) — the message is held", exc)
             return ReviewFinding.escalate(
                 category=ReviewCategory.NONE,
                 rationale=(
-                    "La relecture automatique n'a pas pu s'exécuter. Le message est retenu par "
-                    "précaution : un relecteur absent ne veut pas dire un message validé."
+                    "The automatic review could not run. The message is held as a precaution: "
+                    "an absent reviewer does not mean an approved message."
                 ),
                 source=SOURCE,
             )
 
         if payload is None:
-            logger.warning("Relecture illisible — le message est retenu")
+            logger.warning("Unreadable review — the message is held")
             return ReviewFinding.escalate(
                 category=ReviewCategory.NONE,
-                rationale="La relecture automatique a renvoyé une réponse illisible.",
+                rationale="The automatic review returned an unreadable response.",
                 source=SOURCE,
             )
 
@@ -92,17 +92,17 @@ class LlmMessageReviewer:
 
 def _format(message: MessageUnderReview) -> str:
     objections = (
-        " ; ".join(message.open_objections) if message.open_objections else "aucune connue"
+        " ; ".join(message.open_objections) if message.open_objections else "none known"
     )
-    amount = f"{message.amount:,.0f} €" if message.amount is not None else "non renseigné"
+    amount = f"{message.amount:,.0f} EUR" if message.amount is not None else "not provided"
     return (
-        f"Canal : {message.channel}\n"
-        f"Prospect : {message.company}\n"
-        f"Stade de l'opportunité : {message.stage}\n"
-        f"Montant : {amount}\n"
-        f"Objections ouvertes : {objections}\n"
-        f"Échanges déjà eus : {message.interactions_count}\n\n"
-        "--- Message à relire ---\n"
+        f"Channel: {message.channel}\n"
+        f"Prospect: {message.company}\n"
+        f"Opportunity stage: {message.stage}\n"
+        f"Amount: {amount}\n"
+        f"Open objections: {objections}\n"
+        f"Exchanges so far: {message.interactions_count}\n\n"
+        "--- Message to review ---\n"
         f"{message.content[:_MAX_CONTENT_CHARS]}"
     )
 

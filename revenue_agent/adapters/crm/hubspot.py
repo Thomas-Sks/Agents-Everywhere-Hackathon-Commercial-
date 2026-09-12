@@ -191,15 +191,15 @@ class HubSpotCrmAdapter:
             marker = f"[OBJECTION:{objection.id}]" if objection.id else OBJECTION_PREFIX
             self._create_note(
                 opportunity_id,
-                f"{marker} {objection.text} | cause probable : {objection.root_cause}",
+                f"{marker} {objection.text} | probable cause: {objection.root_cause}",
             )
         if next_steps:
             self._create_note(
-                opportunity_id, f"{INTERACTION_PREFIX} Prochaine étape : {next_steps}"
+                opportunity_id, f"{INTERACTION_PREFIX} Next step: {next_steps}"
             )
         if probability is not None:
             logger.debug(
-                "Probabilité %s non poussée vers HubSpot (propriété calculée côté CRM)",
+                "Probability %s not pushed to HubSpot (property computed CRM-side)",
                 probability,
             )
 
@@ -269,7 +269,7 @@ class HubSpotCrmAdapter:
             if deal_ids:
                 return deal_ids[0]
 
-        logger.info("Aucune opportunité associée au numéro %s", phone_number)
+        logger.info("No opportunity associated with number %s", phone_number)
         return None
 
     def log_call(self, opportunity_id: str, outcome: CallOutcome) -> None:
@@ -410,7 +410,7 @@ def _to_stakeholder(properties: dict) -> Stakeholder:
         part for part in (properties.get("firstname"), properties.get("lastname")) if part
     )
     return Stakeholder(
-        name=name or properties.get("email") or "Contact sans nom",
+        name=name or properties.get("email") or "Unnamed contact",
         role=properties.get("jobtitle") or "",
         email=properties.get("email") or None,
         phone=properties.get("phone") or properties.get("mobilephone") or None,
@@ -449,7 +449,7 @@ def _parse_notes(
 
         objection = _OBJECTION_RE.match(body)
         if objection:
-            text, _, cause = objection.group(2).partition("| cause probable :")
+            text, _, cause = objection.group(2).partition("| probable cause:")
             raw_objections.append(
                 Objection(
                     id=objection.group(1) or "",
@@ -490,12 +490,12 @@ def _parse_notes(
 def _call_body(outcome: CallOutcome) -> str:
     sections = []
     if outcome.summary:
-        sections.append(f"Résumé : {outcome.summary}")
+        sections.append(f"Summary: {outcome.summary}")
     if outcome.sentiment:
-        sections.append(f"Sentiment : {outcome.sentiment}")
+        sections.append(f"Sentiment: {outcome.sentiment}")
     if outcome.transcript:
-        sections.append(f"Transcript :\n{outcome.transcript}")
-    return "\n\n".join(sections) or "Appel sans transcript."
+        sections.append(f"Transcript:\n{outcome.transcript}")
+    return "\n\n".join(sections) or "Call with no transcript."
 
 
 def _phone_variants(phone_number: str) -> list[str]:

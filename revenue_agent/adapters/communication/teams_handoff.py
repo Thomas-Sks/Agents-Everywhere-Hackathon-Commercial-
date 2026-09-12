@@ -39,11 +39,11 @@ class TeamsHandoffAdapter:
         self, *, opportunity: Opportunity, reason: str, urgency: str, context_brief: str
     ) -> None:
         self._post(
-            title=f"Reprise nécessaire — {opportunity.company}",
-            subtitle=f"Urgence {urgency} · stade {opportunity.stage}",
-            facts=[("Motif", reason)],
+            title=f"Handover needed — {opportunity.company}",
+            subtitle=f"Urgency {urgency} · stage {opportunity.stage}",
+            facts=[("Reason", reason)],
             body=context_brief,
-            action_label="Ouvrir la file d'arbitrage",
+            action_label="Open the arbitration queue",
             action_url=self._approval_url(""),
         )
 
@@ -51,11 +51,11 @@ class TeamsHandoffAdapter:
         self, *, opportunity: Opportunity, approval_id: str, channel: str, reason: str, preview: str
     ) -> None:
         self._post(
-            title=f"Validation requise — {opportunity.company}",
-            subtitle=f"Action {channel} retenue · référence {approval_id}",
-            facts=[("Motif", reason)],
+            title=f"Approval required — {opportunity.company}",
+            subtitle=f"{channel} action held · reference {approval_id}",
+            facts=[("Reason", reason)],
             body=preview,
-            action_label="Relire et arbitrer",
+            action_label="Review and arbitrate",
             action_url=self._approval_url(approval_id),
         )
 
@@ -104,7 +104,7 @@ class TeamsHandoffAdapter:
                 ],
             },
         )
-        logger.info("Notification Teams envoyée : %s", title)
+        logger.info("Teams notification sent: %s", title)
 
 
 def _truncate(text: str) -> str:

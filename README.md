@@ -98,13 +98,13 @@ call.
 
 | Rule | Verdict | What it prevents |
 |---|---|---|
-| `mode_dry_run` | blocked | Any send, during rehearsal or testing |
-| `destinataire_hors_liste` | blocked | Writing to a real prospect during a demo |
-| `prix_hors_catalogue` | blocked | A hallucinated price committing the company |
-| `cadence_maximale` | blocked | Hounding a prospect |
-| `mode_supervise` | approval | Every action, until autonomy is explicitly granted |
-| `relecture_*` | approval | A price commitment or unbackable promise going out alone |
-| `montant_eleve` | approval | A large deal playing out without supervision |
+| `dry_run_mode` | blocked | Any send, during rehearsal or testing |
+| `recipient_not_allowed` | blocked | Writing to a real prospect during a demo |
+| `price_not_in_catalogue` | blocked | A hallucinated price committing the company |
+| `rate_limit` | blocked | Hounding a prospect |
+| `supervised_mode` | approval | Every action, until autonomy is explicitly granted |
+| `review_*` | approval | A price commitment or unbackable promise going out alone |
+| `high_amount` | approval | A large deal playing out without supervision |
 
 Three deliberate positions:
 
@@ -375,11 +375,11 @@ screen:
 
 ```bash
 pip install -e ".[dev]"
-pytest          # 111 tests
+pytest          # 115 tests
 ruff check .
 ```
 
-**111 tests, no network, no model calls, 0.8 seconds.** They cover triage, stakes routing,
+**115 tests, no network, no model calls, 0.8 seconds.** They cover triage, stakes routing,
 channel resolution, the scan loop, the autonomy policy, message review and the stakeholder
 map. The tests in
 `test_policy.py` are the most important in the repo: they are the ones verifying what stops a
@@ -403,10 +403,7 @@ deterministic triage guarantees we only pay for reasoning on the opportunities t
 
 ## A note on language
 
-The documentation, code comments and tests are in English. Two things are deliberately **not**:
-
-- **The agent's prompts** (`revenue_agent/prompts/`) — they instruct a sales agent writing to
-  French-speaking prospects. Translating them would change the product's behaviour, not its
-  documentation.
-- **Runtime strings** (logs, CLI output, messages returned to the model) — they are the
-  operator-facing product surface for a French-speaking team, not documentation.
+Everything is in English — documentation, code comments, tests, the agent's prompts, and every
+runtime string (logs, CLI output, the arbitration page, the messages the agent returns to the
+model). The lexical review patterns were translated along with the prompts: leaving them in
+French while the agent writes English would have silently disabled that guardrail.

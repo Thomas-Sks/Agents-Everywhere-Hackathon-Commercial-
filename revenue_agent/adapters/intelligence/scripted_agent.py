@@ -24,19 +24,19 @@ class ScriptedDecisionAgent:
 
     def decide(self, *, opportunity: Opportunity, event: str, strategic: bool = False) -> str:
         logger.warning(
-            "Aucun LLM configuré — événement consigné sans décision (opportunité %s)",
+            "No LLM configured — event recorded without a decision (opportunity %s)",
             opportunity.id,
         )
         self._crm.record_interaction(
             opportunity.id,
             Interaction(
                 channel=Channel.SIGNAL,
-                summary=f"[sans LLM] Événement reçu : {event}",
+                summary=f"[no LLM] Event received: {event}",
                 occurred_at=datetime.now(UTC),
             ),
         )
         channels = ", ".join(c.value for c in opportunity.reachable_channels().available) or "aucun"
         return (
-            "Aucune décision prise : OPENROUTER_API_KEY n'est pas configurée. "
-            f"Événement consigné dans le CRM. Canaux disponibles : {channels}."
+            "No decision taken: OPENROUTER_API_KEY is not configured. "
+            f"Event recorded in the CRM. Available channels: {channels}."
         )

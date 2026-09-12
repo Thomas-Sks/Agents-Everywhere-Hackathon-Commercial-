@@ -38,5 +38,5 @@ class MetaWhatsAppAdapter:
         )
         messages = payload.get("messages", [])
         message_id = messages[0].get("id", "") if messages else ""
-        logger.info("WhatsApp envoyé à %s (id=%s)", to_phone_number, message_id)
+        logger.info("WhatsApp sent to %s (id=%s)", to_phone_number, message_id)
         return message_id

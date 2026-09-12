@@ -1,22 +1,22 @@
 import { defineConfig } from "@trigger.dev/sdk";
 
 /**
- * Configuration Trigger.dev.
+ * Trigger.dev configuration.
  *
- * La référence de projet est créée sur leur dashboard et ne peut pas être devinée : elle est
- * donc lue depuis l'environnement plutôt que codée en dur, ce qui permet de déployer sans
- * modifier ce fichier. Le drapeau `--project-ref` du CLI l'emporte si besoin.
+ * The project reference is created on their dashboard and cannot be guessed: it is therefore
+ * read from the environment rather than hard-coded, so a deployment needs no edit to this
+ * file. The CLI's `--project-ref` flag takes precedence if needed.
  *
- * `dirs` est résolu relativement à l'emplacement de ce fichier.
+ * `dirs` is resolved relative to the location of this file.
  */
 export default defineConfig({
-  project: process.env.TRIGGER_PROJECT_REF ?? "proj_a_renseigner",
+  project: process.env.TRIGGER_PROJECT_REF ?? "proj_to_be_filled_in",
   dirs: ["./src/trigger"],
-  // Une heure : le scan appelle notre API, qui peut enchaîner plusieurs cycles de décision.
+  // One hour: the scan calls our API, which may chain several decision cycles.
   maxDuration: 3600,
   retries: {
-    // En développement, un échec doit être visible immédiatement plutôt que masqué par des
-    // tentatives successives.
+    // In development a failure must be visible immediately rather than masked by successive
+    // retries.
     enabledInDev: false,
     default: {
       maxAttempts: 3,

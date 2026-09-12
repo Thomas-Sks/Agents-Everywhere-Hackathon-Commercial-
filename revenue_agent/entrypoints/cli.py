@@ -4,7 +4,7 @@ Serves three purposes: running a scan by hand (without waiting for the cron), re
 event on a specific opportunity, and walking through the demo scenarios.
 
     python -m revenue_agent.entrypoints.cli scan
-    python -m revenue_agent.entrypoints.cli decide acme-co "Julie a répondu : c'est trop cher"
+    python -m revenue_agent.entrypoints.cli decide acme-co "Julie replied: it is too expensive"
     python -m revenue_agent.entrypoints.cli demo
 """
 
@@ -23,45 +23,45 @@ DEMO_OPPORTUNITY = "acme-co"
 
 DEMO_SCENARIOS: list[tuple[str, str]] = [
     (
-        "Signal d'intérêt après deux mois de silence",
-        "Julie Martin a rouvert l'email de pricing trois fois cette semaine et a consulté la "
-        "page tarifs du site. Aucun message direct reçu.",
+        "Buying signal after two months of silence",
+        "Julie Martin reopened the pricing email three times this week and visited the "
+        "pricing page. No direct message received.",
     ),
     (
-        "Objection prix reçue par email",
-        "Julie a répondu par email : « On aime beaucoup le produit mais c'est trop cher pour "
-        "nous par rapport à notre budget actuel. »",
+        "Price objection received by email",
+        "Julie replied by email: \"We really like the product but it is too expensive for "
+        "us against our current budget.\"",
     ),
     (
-        "Demande dépassant les limites d'autonomie",
-        "Julie demande une remise de 40 % sur le prix catalogue pour signer avant la fin du "
-        "mois, sur un engagement de trois ans.",
+        "Request beyond the autonomy limits",
+        "Julie is asking for a 40% discount off list price to sign before the end of the "
+        "month, on a three-year commitment.",
     ),
 ]
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="revenue-agent", description="Agent commercial autonome")
+    parser = argparse.ArgumentParser(prog="revenue-agent", description="Autonomous sales agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("scan", help="Scanner le CRM et traiter les opportunités détectées")
+    subparsers.add_parser("scan", help="Scan the CRM and process detected opportunities")
 
-    decide_parser = subparsers.add_parser("decide", help="Rejouer un événement sur une opportunité")
+    decide_parser = subparsers.add_parser("decide", help="Replay an event on an opportunity")
     decide_parser.add_argument("opportunity_id")
     decide_parser.add_argument("event")
 
-    subparsers.add_parser("demo", help="Dérouler les scénarios de démonstration")
-    subparsers.add_parser("status", help="Afficher la configuration effective")
+    subparsers.add_parser("demo", help="Run the demonstration scenarios")
+    subparsers.add_parser("status", help="Show the effective configuration")
 
     approvals_parser = subparsers.add_parser(
-        "approvals", help="Arbitrer les actions en attente de validation humaine"
+        "approvals", help="Arbitrate actions awaiting human approval"
     )
     approvals_sub = approvals_parser.add_subparsers(dest="approvals_command", required=True)
-    approvals_sub.add_parser("list", help="Lister les actions en attente")
-    for verb, helptext in (("approve", "Approuver et envoyer"), ("reject", "Rejeter")):
+    approvals_sub.add_parser("list", help="List pending actions")
+    for verb, helptext in (("approve", "Approve and send"), ("reject", "Reject")):
         action_parser = approvals_sub.add_parser(verb, help=helptext)
         action_parser.add_argument("approval_id")
-        action_parser.add_argument("--reviewer", default=os.environ.get("USER", "opérateur"))
+        action_parser.add_argument("--reviewer", default=os.environ.get("USER", "operator"))
         action_parser.add_argument("--note", default="")
 
     args = parser.parse_args(argv)
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         settings = Settings.from_env()
     except ConfigurationError as exc:
-        print(f"Configuration invalide : {exc}", file=sys.stderr)
+        print(f"Invalid configuration: {exc}", file=sys.stderr)
         return 2
 
     configure_logging(settings.log_level)
@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "decide":
         result = container.decision_cycle.execute_safely(args.opportunity_id, args.event)
         if result is None:
-            print("Cycle de décision en échec — voir les logs.", file=sys.stderr)
+            print("Decision cycle failed — see the logs.", file=sys.stderr)
             return 1
         _print_decision(result.summary)
         return 0
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
             print("═" * 78)
             result = container.decision_cycle.execute_safely(DEMO_OPPORTUNITY, event)
             if result is not None:
-                print(f"\n  Routage : {result.routing_reason}")
+                print(f"\n  Routing: {result.routing_reason}")
                 _print_decision(result.summary)
         return 0
 
@@ -105,23 +105,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         degraded = settings.degraded_components()
         policy = settings.policy
-        print(f"Entreprise         : {settings.company_name}")
-        print(f"Mode d'autonomie   : {policy.mode.value}")
-        print(f"Seuil d'autonomie  : {policy.max_autonomous_amount:,.0f} €")
-        print(f"Cadence max        : {policy.max_outbound_per_day} message(s)/prospect/24 h")
+        print(f"Company            : {settings.company_name}")
+        print(f"Autonomy mode      : {policy.mode.value}")
+        print(f"Autonomy threshold : {policy.max_autonomous_amount:,.0f} EUR")
+        print(f"Max cadence        : {policy.max_outbound_per_day} message(s)/prospect/24h")
         print(
-            "Destinataires      : "
+            "Recipients         : "
             + (
                 ", ".join(policy.allowed_recipients)
                 if policy.allowed_recipients
-                else "non restreints"
+                else "unrestricted"
             )
         )
-        print(f"Modèle routine     : {settings.openrouter.model_routine}")
-        print(f"Modèle stratégie   : {settings.openrouter.model_strategic}")
-        print(f"CRM                : {'HubSpot' if settings.hubspot.enabled else 'JSON local'}")
-        print(f"Mode simulé        : {' ; '.join(degraded) if degraded else 'aucun'}")
-        print(f"En attente de vald.: {len(container.review_approval.list_pending())}")
+        print(f"Routine model      : {settings.openrouter.model_routine}")
+        print(f"Strategic model    : {settings.openrouter.model_strategic}")
+        print(f"CRM                : {'HubSpot' if settings.hubspot.enabled else 'local JSON'}")
+        print(f"Simulated          : {' ; '.join(degraded) if degraded else 'none'}")
+        print(f"Pending approvals  : {len(container.review_approval.list_pending())}")
         return 0
 
     return 1
@@ -133,13 +133,13 @@ def _run_approvals(container, args) -> int:
     if args.approvals_command == "list":
         pending = review.list_pending()
         if not pending:
-            print("Aucune action en attente de validation.")
+            print("No action awaiting approval.")
             return 0
-        print(f"{len(pending)} action(s) en attente :\n")
+        print(f"{len(pending)} action(s) pending:\n")
         for approval in pending:
             print(approval.summary())
             print()
-        print("Pour arbitrer : approvals approve <id>  |  approvals reject <id> --note '...'")
+        print("To arbitrate: approvals approve <id>  |  approvals reject <id> --note '...'")
         return 0
 
     if args.approvals_command == "approve":

@@ -50,7 +50,7 @@ class RetellVoiceAdapter:
         )
         call_id = payload.get("call_id", "")
         logger.info(
-            "Appel Retell déclenché vers %s (opportunité %s, call_id=%s)",
+            "Retell call placed to %s (opportunity %s, call_id=%s)",
             to_phone_number,
             opportunity.id,
             call_id,
@@ -76,8 +76,8 @@ def _dynamic_variables(opportunity: Opportunity, objective: str) -> dict[str, st
         "contact_role": contact.role if contact else "",
         "deal_stage": opportunity.stage,
         "call_objective": objective,
-        "open_objections": objections or "aucune objection connue",
-        "recent_history": recent_history or "premier contact",
+        "open_objections": objections or "no known objection",
+        "recent_history": recent_history or "first contact",
     }
     return {key: _truncate(value) for key, value in variables.items()}
 

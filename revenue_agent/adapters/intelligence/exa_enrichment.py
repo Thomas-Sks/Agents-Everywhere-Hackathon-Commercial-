@@ -37,9 +37,9 @@ class ExaEnrichmentAdapter:
             "/search",
             json={
                 "query": (
-                    f"Actualité de l'entreprise {company_name} : levée de fonds, "
-                    "recrutements, nomination de dirigeants, ouverture de bureaux, "
-                    "changement de fournisseur ou de stratégie."
+                    f"News about {company_name}: funding rounds, hiring, "
+                    "leadership appointments, new offices, supplier or strategy "
+                    "changes."
                 ),
                 "category": "news",
                 "startPublishedDate": since.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -47,8 +47,8 @@ class ExaEnrichmentAdapter:
                 "contents": {
                     "summary": {
                         "query": (
-                            "Quel signal commercial exploitable cet article contient-il "
-                            "au sujet de cette entreprise ?"
+                            "What actionable sales signal does this article contain "
+                            "about this company?"
                         )
                     }
                 },
@@ -65,7 +65,7 @@ class ExaEnrichmentAdapter:
             for result in payload.get("results", [])
         ]
         logger.info(
-            "Exa : %s résultat(s) pour %s (coût %s $)",
+            "Exa: %s result(s) for %s (cost $%s)",
             len(insights),
             company_name,
             payload.get("costDollars", "?"),
@@ -80,7 +80,7 @@ class NullEnrichmentAdapter:
     def research_company(
         self, company_name: str, *, since_days: int = 90, limit: int = 5
     ) -> list[ProspectInsight]:
-        raise EnrichmentError("exa", "enrichissement web non configuré (EXA_API_KEY absente)")
+        raise EnrichmentError("exa", "web enrichment not configured (EXA_API_KEY missing)")
 
 
 def _parse_published_date(raw: str | None) -> datetime | None:

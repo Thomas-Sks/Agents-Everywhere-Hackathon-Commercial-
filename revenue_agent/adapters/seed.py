@@ -17,23 +17,23 @@ DEMO_PRODUCTS = [
     {
         "id": "gtx-basic",
         "name": "GTX Basic",
-        "category": "Stockage serveur",
+        "category": "Server storage",
         "price": 550,
-        "description": "Stockage d'entrée de gamme pour PME, jusqu'à 10 utilisateurs.",
+        "description": "Entry-level storage for SMBs, up to 10 users.",
     },
     {
         "id": "gtx-pro",
         "name": "GTX Pro",
-        "category": "Stockage serveur",
+        "category": "Server storage",
         "price": 4800,
-        "description": "Stockage évolutif pour moyennes entreprises, réplication incluse.",
+        "description": "Scalable storage for mid-market companies, replication included.",
     },
     {
         "id": "mg-special",
         "name": "MG Special Edition",
-        "category": "Sécurité réseau",
+        "category": "Network security",
         "price": 22000,
-        "description": "Pare-feu et supervision réseau, déploiement multi-sites.",
+        "description": "Firewall and network monitoring, multi-site deployment.",
     },
 ]
 
@@ -61,28 +61,28 @@ def _demo_opportunities() -> dict:
             "stakeholders": [
                 {
                     "name": "Julie Martin",
-                    "role": "Directrice Marketing",
+                    "role": "Marketing Director",
                     "email": "julie.martin@acme.example",
                     "phone": "+33600000001",
                     "stance": "champion",
-                    "notes": "A initié le contact, enthousiaste après la démo produit.",
+                    "notes": "Initiated contact, enthusiastic after the product demo.",
                 },
                 {
                     "name": "Marc Dubois",
-                    "role": "Directeur Financier",
+                    "role": "CFO",
                     "email": "marc.dubois@acme.example",
                     "phone": None,
                     "stance": "decision_maker",
-                    "notes": "Valide le budget. Jamais contacté directement à ce jour.",
+                    "notes": "Signs off the budget. Never contacted directly to date.",
                 },
             ],
             "objections": [
                 {
                     "text": (
-                        "Nous ne pouvons pas changer de fournisseur avant la fin "
-                        "du contrat en cours."
+                        "We cannot switch suppliers before our current contract "
+                        "ends."
                     ),
-                    "root_cause": "timing_contractuel",
+                    "root_cause": "contractual_timing",
                     "resolved": False,
                     "raised_at": two_months_ago.isoformat(),
                 }
@@ -91,14 +91,14 @@ def _demo_opportunities() -> dict:
                 {
                     "channel": "voice",
                     "summary": (
-                        "Appel de découverte. Contrainte principale : contrat fournisseur en "
-                        "cours jusqu'à fin d'année. Le produit n'est pas en cause."
+                        "Discovery call. Main constraint: supplier contract running "
+                        "until year end. The product is not the issue."
                     ),
                     "occurred_at": two_months_ago.isoformat(),
                 }
             ],
-            "next_steps": "Vérifier l'échéance réelle du contrat actuel et impliquer le CFO.",
-            "risk_notes": "Le décideur budgétaire n'a jamais été engagé directement.",
+            "next_steps": "Check the real end date of the current contract and engage the CFO.",
+            "risk_notes": "The budget decision maker has never been engaged directly.",
             "last_activity_at": two_months_ago.isoformat(),
         }
     }
